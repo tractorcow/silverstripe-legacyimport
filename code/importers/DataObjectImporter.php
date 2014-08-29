@@ -3,6 +3,8 @@
 
 class DataObjectImporter extends Object {
 
+	const STRATEGY_ADD = 'Add';
+
 	/**
 	 * Source selector query
 	 *
@@ -25,7 +27,7 @@ class DataObjectImporter extends Object {
 	protected $targetWhere = array();
 
 	/**
-	 * Merge strategy. These could be:
+	 * Merge strategy. These could include
 	 *
 	 * - 'Add' Only add new objects but do not merge with existing
 	 * - 'Identify' Do not add or update objects, but create LegacyDataObject record for matched records
@@ -35,7 +37,7 @@ class DataObjectImporter extends Object {
 	 *
 	 * @var string
 	 */
-	protected $strategy = 'Add';
+	protected $strategy;
 
 	/**
 	 * List of columns to use to compare legacy dataobjects to existing ones to determine if a match can be made
@@ -57,6 +59,7 @@ class DataObjectImporter extends Object {
 		// Save running task
 		$this->task = $task;
 
+		// Importn parameters
 		if(!empty($parameters['strategy'])) {
 			$this->strategy = $parameters['strategy'];
 		}
@@ -69,6 +72,14 @@ class DataObjectImporter extends Object {
 		if(!empty($parameters['where'])) {
 			$this->targetWhere = $parameters['where'];
 		}
+		
+		// Validate
+		if(empty($this->targetClass)) {
+			throw new InvalidArgumentException("Missing class specified for step ".get_class($this));
+		}
+		if(empty($this->strategy)) {
+			throw new InvalidArgumentException("Missing strategy for step ".get_class($this));
+		}
 	}
 
 	/**
@@ -77,6 +88,71 @@ class DataObjectImporter extends Object {
 	 * @var ArrayList
 	 */
 	protected $remoteObjects = null;
+
+	/**
+	 * Get all local objects
+	 *
+	 * @return DataList
+	 */
+	protected function getLocalObjects() {
+		return DataObject::get($this->targetClass);
+	}
+
+	/**
+	 * Get all unmatched local objects
+	 *
+	 * @return DataList
+	 */
+	protected function getUnmatchedLocalObjects() {
+		$baseClass = ClassInfo::baseDataClass($this->targetClass);
+		return $this->getLocalObjects()
+			->leftJoin(
+				'LegacyDataObject',
+				"\"{$baseClass}\".\"ID\" = \"LegacyDataObject\".\"LocalID\" AND
+				 \"LegacyDataObject\".\"ObjectClass\" = '".Convert::raw2sql($baseClass)."'"
+			)
+			->where("\"LegacyDataObject\".\"ID\" IS NULL");
+	}
+
+	/**
+	 * Get all matched local objects
+	 *
+	 * @return DataList
+	 */
+	protected function getMatchedLocalObjects() {
+		$baseClass = ClassInfo::baseDataClass($this->targetClass);
+		return $this->getLocalObjects()
+			->innerJoin(
+				'LegacyDataObject',
+				"\"{$baseClass}\".\"ID\" = \"LegacyDataObject\".\"LocalID\" AND
+				 \"LegacyDataObject\".\"ObjectClass\" = '".Convert::raw2sql($baseClass)."'"
+			);
+	}
+
+	/**
+	 * Select all remote objects yet unmatched
+	 *
+	 * @return ArrayList
+	 */
+	protected function getUnmatchedRemoteObjects() {
+		$objects = $this->getRemoteObjects();
+		$matchedIDs = $this->findMatchings()->column('RemoteID');
+		if(empty($matchedIDs)) return $objects;
+		return $objects->exclude('ID', $matchedIDs);
+	}
+
+	/**
+	 * Select all remote objects which have local matches
+	 *
+	 * @return ArrayList
+	 */
+	protected function getMatchedRemoteObjects() {
+		$matchedIDs = $this->findMatchings()->column('RemoteID');
+		if(empty($matchedIDs)) return ArrayList::create();
+		return $this
+			->getRemoteObjects()
+			->filter('ID', $matchedIDs);
+	}
 
 	/**
 	 * Select all remote objects given the query parameters
@@ -118,8 +194,38 @@ class DataObjectImporter extends Object {
 	 * @param LegacyImport $import
 	 */
 	public function identifyStep() {
-		$results = $this->getRemoteObjects();
-		$this->task->message("Identifying ".$results->count()." records");
+		// If we are doing a basic add then there's no identification or merging necessary
+		if($this->strategy === self::STRATEGY_ADD) {
+			$this->task->message('Skipping identification for add strategy');
+			return;
+		}
+
+		// Check before status
+		$beforeUnmatched = $this->getUnmatchedRemoteObjects()->count();
+
+		// Query all local objects which have NOT been matched
+		$localObjects = $this->getUnmatchedLocalObjects();
+		$localCount = $localObjects->count();
+		$this->task->message("Checking {$localCount} unmatched local objects");
+
+		// Search all items of the given target class
+		$checked = 0;
+		foreach($localObjects as $localObject) {
+			// Find remote object matching this local one
+			$remoteData = $this->findRemoteObject($localObject->toMap());
+			if($remoteData) {
+				// Given the newly matched item save it
+				$remoteID = $remoteData['ID'];
+				$this->addMatching($localObject->ID, $remoteID);
+			}
+			
+			// Show progress indicator
+			$this->task->progress(++$checked, $localCount);
+		}
+
+		// Check real progress (reduce number of unmatched remote object)
+		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
+		$this->task->message("Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
 	}
 
 	/**
@@ -156,9 +262,23 @@ class DataObjectImporter extends Object {
 			))
 			->first();
 		$object = $object ?: LegacyDataObject::create();
+		$object->ObjectClass = $baseClass;
 		$object->RemoteID = $remoteID;
 		$object->LocalID = $localID;
 		$object->write();
+	}
+
+	/**
+	 * Get all matchings for the current class
+	 *
+	 * @return DataList
+	 */
+	protected function findMatchings() {
+		$baseClass = ClassInfo::baseDataClass($this->targetClass);
+		return LegacyDataObject::get()
+			->filter(array(
+				'ObjectClass' => $baseClass
+			));
 	}
 
 	/**
@@ -168,12 +288,10 @@ class DataObjectImporter extends Object {
 	 * @return LegacyDataObject Matching data for the given remote ID
 	 */
 	protected function findMatchingByRemote($remoteID) {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
-		return LegacyDataObject::get()
-			->filter(array(
-				'ObjectClass' => $baseClass,
-				'RemoteID' => $remoteID
-			))->first();
+		return $this
+			->findMatchings()
+			->filter('RemoteID', $remoteID)
+			->first();
 	}
 
 	/**
@@ -200,7 +318,8 @@ class DataObjectImporter extends Object {
 	protected function findLocalObject($data) {
 		$query = DataObject::get($this->targetClass);
 		foreach($this->idColumns as $column) {
-			$query = $query->filter($column, $data[$column]);
+			$value = isset($data[$column]) ? $data[$column] : null;
+			$query = $query->filter($column, $value);
 		}
 		return $query->first();
 	}
@@ -214,7 +333,8 @@ class DataObjectImporter extends Object {
 	protected function findRemoteObject($data) {
 		$items = $this->getRemoteObjects();
 		foreach($this->idColumns as $column) {
-			$items = $items->filter($column, $data[$column]);
+			$value = isset($data[$column]) ? $data[$column] : null;
+			$items = $items->filter($column, $value);
 		}
 		return $items->first();
 	}

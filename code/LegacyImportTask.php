@@ -25,6 +25,18 @@ class LegacyImportTask extends BuildTask {
 	public function beQuiet() {
 		$this->quiet = true;
 	}
+	
+	public function progress($num, $total) {
+		// Try not to show more than about 1000 dots
+		$skip = round($total / 1000)+1;
+		if($num % $skip) return;
+		
+		// Echo result
+		echo chr(round(25 * $num / $total) + ord('A'));
+		if($num >= $total) {
+			echo Director::is_cli() ? "\n" : "<br />";
+		}
+	}
 
 	/**
 	 * Output a message

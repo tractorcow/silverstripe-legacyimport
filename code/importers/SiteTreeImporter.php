@@ -50,12 +50,19 @@ class SiteTreeImporter extends DataObjectImporter {
 			return parent::identifyStep();
 		}
 
+		// Identify remote objects
+		$beforeUnmatched = $this->getUnmatchedRemoteObjects()->count();
+
 		// Get items to identify
 		$remoteItems = $this->getRemoteObjects();
-		$this->task->message("Identifying ".$remoteItems->count()." via ParentID");
+		$this->task->message("Performing depth first search of pages via ParentID");
 
 		// Match subtree starting at the root
 		$this->identifySubtree($remoteItems, 0, 0);
+
+		// Check real progress (reduce number of unmatched remote object)
+		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
+		$this->task->message("Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
 	}
 	
 }
