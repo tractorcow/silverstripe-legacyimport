@@ -32,7 +32,7 @@ class SiteTreeImporter extends DataObjectImporter {
 				$remoteData = $this->findRemoteObject($remoteFilter);
 				if($remoteData) {
 					// Given the newly matched item save it
-					$remoteID = $remoteData['ID'];
+					$remoteID = $remoteData->ID;
 					$this->addMatching($localPage->ID, $remoteID);
 				}
 			}

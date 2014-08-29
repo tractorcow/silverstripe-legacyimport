@@ -13,8 +13,4 @@ class LegacyDataObject extends DataObject {
 		'LocalID' => 'Int',
 		'RemoteID' => 'Int'
 	);
-
-	private static $has_one = array(
-		'LegacyDataObject' => 'LegacyDataObject'
-	);
 }

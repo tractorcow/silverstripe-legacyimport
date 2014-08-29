@@ -154,10 +154,26 @@ class DataObjectImporter extends Object {
 	 * @return ArrayList
 	 */
 	protected function getUnmatchedRemoteObjects() {
-		$objects = $this->getRemoteObjects();
-		$matchedIDs = $this->findMatchings()->column('RemoteID');
-		if(empty($matchedIDs)) return $objects;
-		return $objects->exclude('ID', $matchedIDs);
+		$remoteObjects = $this->getRemoteObjects();
+		$matchedIDs = $this->findMatchings()->sort('"RemoteID" ASC')->column('RemoteID');
+		if(empty($matchedIDs)) return $remoteObjects;
+
+		// Odd performance optimisation begins here
+
+		// Slightly more optimised array search, based on assumption
+		// that both $matchedIDs and $objects are sorted by ID
+		// Should average to O(n) performance (size of remote objects + size of matches)
+		$matched = array();
+		foreach($remoteObjects as $remoteObject) {
+			$id = $remoteObject->ID;
+			// Pop items from start of matches until we find one that might be the current object
+			while($matchedIDs && (reset($matchedIDs) < $id)) {
+				array_shift($matchedIDs);
+			}
+			if($matchedIDs && reset($matchedIDs) == $id) continue;
+			$matched[] = $remoteObject;
+		}
+		return new ArrayList($matched);
 	}
 
 	/**
@@ -166,15 +182,29 @@ class DataObjectImporter extends Object {
 	 * @return ArrayList
 	 */
 	protected function getMatchedRemoteObjects() {
-		$matchedIDs = $this->findMatchings()->column('RemoteID');
+		$matchedIDs = $this->findMatchings()->sort('"RemoteID" ASC')->column('RemoteID');
 		if(empty($matchedIDs)) return ArrayList::create();
-		return $this
-			->getRemoteObjects()
-			->filter('ID', $matchedIDs);
+
+		// Odd performance optimisation begins here
+
+		// Slightly more optimised array search, based on assumption
+		// that both $matchedIDs and $objects are sorted by ID
+		// Should average to O(n) performance (size of remote objects + size of matches)
+		$remoteObjects = $this->getRemoteObjects();
+		$matched = array();
+		foreach($remoteObjects as $remoteObject) {
+			$id = $remoteObject->ID;
+			// Pop items from start of matches until we find one that might be the current object
+			while($matchedIDs && (reset($matchedIDs) < $id)) {
+				array_shift($matchedIDs);
+			}
+			if($matchedIDs && reset($matchedIDs) == $id) $matched[] = $remoteObject;
+		}
+		return new ArrayList($matched);
 	}
 
 	/**
-	 * Select all remote objects given the query parameters
+	 * Select all remote objects given the query parameters sorted by ID
 	 *
 	 * @return array
 	 */
@@ -187,6 +217,7 @@ class DataObjectImporter extends Object {
 
 		// Generate sql query
 		$query = new SQLQuery('*', "\"{$baseClass}\"", $this->targetWhere);
+		$query->setOrderBy("\"{$baseClass}\".\"ID\" ASC"); // Sort by ID for some performance reasons
 		foreach($tables as $class) {
 			$query->addLeftJoin($class, "\"{$baseClass}\".\"ID\" = \"{$class}\".\"ID\"");
 		}

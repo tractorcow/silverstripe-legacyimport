@@ -116,7 +116,8 @@ class LegacyImportTask extends BuildTask {
 	 * @param SQLQuery $query
 	 */
 	public function query(SQLQuery $query) {
-		return DB::query($query->sql(), self::config()->remote_database);
+		return DB::getConn(self::config()->remote_database)
+			->query($query->sql());
 	}
 
 	/**
