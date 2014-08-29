@@ -3,7 +3,32 @@
 
 class DataObjectImporter extends Object {
 
+	/**
+	 * Just add new items regardless of identification
+	 */
 	const STRATEGY_ADD = 'Add';
+
+	/**
+	 * Add any objects which don't exist, but identify matching objects without updating them
+	 */
+	const STRATEGY_ADD_OR_IDENTIFY = 'AddOrIdentify';
+
+	/**
+	 * Update items but don't add new ones.
+	 * Implies Identify
+	 */
+	const STRATEGY_UPDATE = 'Update';
+
+	/**
+	 * If an object exists in both, update. Otherwise add it.
+	 * Implies Identify
+	 */
+	const STRATEGY_ADD_OR_UPDATE = 'AddOrUpdate';
+
+	/**
+	 * Only identify matching records. Do not match or update any.
+	 */
+	const STRATEGY_IDENTIFY = 'Identify';
 
 	/**
 	 * Source selector query
@@ -27,13 +52,7 @@ class DataObjectImporter extends Object {
 	protected $targetWhere = array();
 
 	/**
-	 * Merge strategy. These could include
-	 *
-	 * - 'Add' Only add new objects but do not merge with existing
-	 * - 'Identify' Do not add or update objects, but create LegacyDataObject record for matched records
-	 * - 'Update' Only update existing objects. Do not add.
-	 * - 'AddOrIdentify' Add new objects, but only identify existing objects
-	 * - 'AddOrUpdate' Add new objects or update existing objects
+	 * Merge strategy for this task
 	 *
 	 * @var string
 	 */
@@ -190,23 +209,25 @@ class DataObjectImporter extends Object {
 
 	/**
 	 * Query and map all remote objects to local ones
-	 *
-	 * @param LegacyImport $import
 	 */
-	public function identifyStep() {
+	public function identifyPass() {
 		// If we are doing a basic add then there's no identification or merging necessary
-		if($this->strategy === self::STRATEGY_ADD) {
-			$this->task->message('Skipping identification for add strategy');
+		if(!$this->canIdentify()) {
+			$this->task->message(' * Skipping identification for add only strategy');
 			return;
 		}
 
 		// Check before status
 		$beforeUnmatched = $this->getUnmatchedRemoteObjects()->count();
+		if($beforeUnmatched === 0) {
+			$this->task->message(" * All remote objects identified, skipping");
+			return;
+		}
 
 		// Query all local objects which have NOT been matched
 		$localObjects = $this->getUnmatchedLocalObjects();
 		$localCount = $localObjects->count();
-		$this->task->message("Checking {$localCount} unmatched local objects");
+		$this->task->message(" * Checking {$localCount} unmatched local against {$beforeUnmatched} remote objects");
 
 		// Search all items of the given target class
 		$checked = 0;
@@ -225,25 +246,109 @@ class DataObjectImporter extends Object {
 
 		// Check real progress (reduce number of unmatched remote object)
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
-		$this->task->message("Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
+		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
+	}
+
+	/**
+	 * Determine if the strategy allows objects to be added
+	 *
+	 * @return bool
+	 */
+	protected function canAdd() {
+		switch($this->strategy) {
+			case self::STRATEGY_IDENTIFY:
+			case self::STRATEGY_UPDATE:
+				return false;
+			default:
+				return true;
+		}
+	}
+
+	/**
+	 * Determine if the strategy allows objects to be updated
+	 *
+	 * @return bool
+	 */
+	protected function canUpdate() {
+		switch($this->strategy) {
+			case self::STRATEGY_IDENTIFY:
+			case self::STRATEGY_ADD:
+			case self::STRATEGY_ADD_OR_IDENTIFY:
+				return false;
+			default:
+				return true;
+		}
+	}
+
+	/**
+	 * Determine if the strategy allows objects to be identified
+	 *
+	 * @return bool
+	 */
+	protected function canIdentify() {
+		return $this->strategy !== self::STRATEGY_ADD;
 	}
 
 	/**
 	 * Query and create all remote objects, making sure to set all has_one fields to 0
-	 *
-	 * @param LegacyImport $import
 	 */
-	public function importStep() {
-		$results = $this->getRemoteObjects();
-		$this->task->message('Importing '.$results->count().' records');
-		
+	public function importPass() {
+		// Optimise list of items to import
+		if($this->canUpdate() && $this->canAdd()) {
+			// Add or Update operations should look at all objects
+			$remoteObjects = $this->getRemoteObjects();
+			$remoteCount = $remoteObjects->count();
+			$this->task->message(" * Importing {$remoteCount} remote records");
+
+		} elseif($this->canUpdate()) {
+			// If only updating then only limit to matched records
+			$remoteObjects = $this->getMatchedRemoteObjects();
+			$remoteCount = $remoteObjects->count();
+			$this->task->message(" * Importing {$remoteCount} remote records (limited to identified records)");
+			
+		} elseif($this->canAdd()) {
+			// If update isn't allowed we don't need to bother with those records
+			$remoteObjects = $this->getUnmatchedRemoteObjects();
+			$remoteCount = $remoteObjects->count();
+			$this->task->message(" * Importing {$remoteCount} remote records (limited to new records)");
+			
+		} else {
+			$this->task->message(' * Skipping import for identify only strategy');
+			return;
+		}
+
+		// Add all objects
+		$updated = 0;
+		$added = 0;
+		$total = 0;
+		foreach($remoteObjects as $remoteObject) {
+			// Show progress indicator
+			$this->task->progress(++$total, $remoteCount);
+
+			// If allowed, detect updateable objects
+			$localObject = null;
+			if($this->canUpdate() && ($localObject = $this->findMatchedLocalObject($remoteObject->ID))) {
+				// Update existing object
+				$this->updateLocalObject($localObject, $remoteObject);
+				++$updated;
+			}
+
+			// If allowed, create a new object
+			if(empty($localObject) && $this->canAdd()) {
+				// Make a new object
+				$this->createLocalFromRemoteObject($remoteObject);
+				++$added;
+			}
+		}
+		// Done!
+		$this->task->message(" * Result: {$added} added, {$updated} updated");
 	}
 
 	/**
 	 * Run over all imported objects and link them to their respective associative objects
 	 */
-	public function linkStep() {
-
+	public function linkPass() {
+		
 	}
 
 	/**
@@ -310,6 +415,19 @@ class DataObjectImporter extends Object {
 	}
 
 	/**
+	 * Retrieves any previously identified local object based on remote ID
+	 *
+	 * @param int $remoteID ID of remote object to match against
+	 * @return DataObject The matched local dataobject if it can be found
+	 */
+	protected function findMatchedLocalObject($remoteID) {
+		$matching = $this->findMatchingByRemote($remoteID);
+		if($matching) {
+			return $this->getLocalObjects()->byID($matching->LocalID);
+		}
+	}
+
+	/**
 	 * Find local dataobject which matches the given $data using the current $idColumns
 	 *
 	 * @param array $data array of data to query against
@@ -337,5 +455,46 @@ class DataObjectImporter extends Object {
 			$items = $items->filter($column, $value);
 		}
 		return $items->first();
+	}
+
+	/**
+	 * Copy all non-relation fields from the remote object to the local object
+	 *
+	 * @param DataObject $localObject
+	 * @param ArrayData $remoteObject
+	 */
+	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
+		foreach($remoteObject->toMap() as $field => $value) {
+			// Skip all relations, since ID or foreign IDs on the other server don't make sense here
+			if(preg_match('/.*ID$/', $field)) continue;
+			// Don't change class
+			if($field === 'ClassName') continue;
+			
+			$localObject->$field = $value;
+		}
+		$localObject->write();
+	}
+
+	/**
+	 * Create a local dataobject for import from an external dataset
+	 *
+	 * @param ArrayData $remoteObject Data from remote object
+	 * @return DataObject New dataobject created from $remoteObject
+	 */
+	protected function createLocalFromRemoteObject(ArrayData $remoteObject) {
+		// Allow data to override class
+		$class = ($remoteObject->ClassName && is_a($remoteObject->ClassName, $this->targetClass, true))
+			? $remoteObject->ClassName
+			: $this->targetClass;
+		$localObject = $class::create();
+
+		// Populate
+		$this->updateLocalObject($localObject, $remoteObject);
+
+		// Immediately save identification
+		// Note: If using a non-identifying strategy (e.g. Add) then this step is important
+		// to ensure that this object is not re-added in subsequent imports
+		$this->addMatching($localObject->ID, $remoteObject->ID);
+		return $localObject;
 	}
 }

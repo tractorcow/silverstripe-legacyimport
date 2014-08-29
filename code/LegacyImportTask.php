@@ -48,13 +48,34 @@ class LegacyImportTask extends BuildTask {
 		Debug::message(date('Y-m-d H:i:s').': '.$message, false);
 	}
 
+	/**
+	 * @param SS_HTTPRequest $request
+	 * @return SS_HTTPResponse
+	 */
 	public function run($request) {
 		$this->message('Beginning import');
 
 		$this->connectToRemoteSite();
-		$this->identifyStep();
-		$this->importStep();
-		$this->linkStep();
+
+		// Check if we only want to do a single step
+		if($pass = $request->requestVar('pass')) {
+			$this->message("Resuming at {$pass} pass");
+			switch($pass) {
+				case 'identify':
+					$this->identifyPass();
+					return;
+				case 'import':
+					$this->importPass();
+					return;
+				case 'link':
+					$this->linkPass();
+					return;
+			}
+		}
+
+		$this->identifyPass();
+		$this->importPass();
+		$this->linkPass();
 	}
 
 	/**
@@ -83,7 +104,8 @@ class LegacyImportTask extends BuildTask {
 	 * Generate DB connection to remote site
 	 */
 	protected function connectToRemoteSite() {
-		$this->message('Connecting to remote DB');
+		$this->message('');
+		$this->message('== Connecting to remote DB ==');
 		global $remoteDatabaseConfig;
 		DB::connect($remoteDatabaseConfig, self::config()->remote_database);
 	}
@@ -100,33 +122,36 @@ class LegacyImportTask extends BuildTask {
 	/**
 	 * Generate mapping of remote object ids to local object ids
 	 */
-	protected function identifyStep() {
-		$this->message('Identifying all all objects');
+	protected function identifyPass() {
+		$this->message('');
+		$this->message('== Identifying all objects ==');
 		foreach($this->tasks() as $task) {
 			$this->message('Identifying ' . $task->describe());
-			$task->identifyStep();
+			$task->identifyPass();
 		}
 	}
 
 	/**
 	 * Run through the import strategy, importing all objects available
 	 */
-	protected function importStep() {
-		$this->message('Importing all objects');
+	protected function importPass() {
+		$this->message('');
+		$this->message('== Importing all objects ==');
 		foreach($this->tasks() as $task) {
 			$this->message('Importing ' . $task->describe());
-			$task->importStep();
+			$task->importPass();
 		}
 	}
 
 	/**
 	 * Link all saved objects to any relations
 	 */
-	protected function linkStep() {
-		$this->message('Linking relations for all imported objects');
+	protected function linkPass() {
+		$this->message('');
+		$this->message('== Linking relations for all imported objects ==');
 		foreach($this->tasks() as $task) {
 			$this->message('Updating links for ' . $task->describe());
-			$task->linkStep();
+			$task->linkPass();
 		}
 	}
 

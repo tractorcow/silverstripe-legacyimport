@@ -44,10 +44,10 @@ class SiteTreeImporter extends DataObjectImporter {
 	/**
 	 * Query and map all remote objects to local ones
 	 */
-	public function identifyStep() {
+	public function identifyPass() {
 		// If we are not searching hierchally then the default implementation is sufficient
 		if(!in_array('ParentID', $this->idColumns)) {
-			return parent::identifyStep();
+			return parent::identifyPass();
 		}
 
 		// Identify remote objects
@@ -55,14 +55,14 @@ class SiteTreeImporter extends DataObjectImporter {
 
 		// Get items to identify
 		$remoteItems = $this->getRemoteObjects();
-		$this->task->message("Performing depth first search of pages via ParentID");
+		$this->task->message(" * Performing depth first search of pages via ParentID");
 
 		// Match subtree starting at the root
 		$this->identifySubtree($remoteItems, 0, 0);
 
 		// Check real progress (reduce number of unmatched remote object)
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
-		$this->task->message("Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
+		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
 	}
 	
 }
