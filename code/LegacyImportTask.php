@@ -129,6 +129,7 @@ class LegacyImportTask extends BuildTask {
 		foreach($this->tasks() as $task) {
 			$this->message('Identifying ' . $task->describe());
 			$task->identifyPass();
+			$task->flush();
 		}
 	}
 
@@ -141,6 +142,7 @@ class LegacyImportTask extends BuildTask {
 		foreach($this->tasks() as $task) {
 			$this->message('Importing ' . $task->describe());
 			$task->importPass();
+			$task->flush();
 		}
 	}
 
@@ -153,6 +155,7 @@ class LegacyImportTask extends BuildTask {
 		foreach($this->tasks() as $task) {
 			$this->message('Updating links for ' . $task->describe());
 			$task->linkPass();
+			$task->flush();
 		}
 	}
 

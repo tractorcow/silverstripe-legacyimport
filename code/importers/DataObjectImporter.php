@@ -386,7 +386,6 @@ class DataObjectImporter extends Object {
 	 * Run over all imported objects and link them to their respective associative objects
 	 */
 	public function linkPass() {
-		$this->flushMappedRelations();
 
 		// Todo : link objects which may not have been linkable during import
 	}
@@ -434,11 +433,12 @@ class DataObjectImporter extends Object {
 		if($result = $items->first()) return new ArrayData($result);
 	}
 
+	/**
+	 * Cache of mapped relations
+	 *
+	 * @array
+	 */
 	protected $mappedRelations = array();
-
-	protected function flushMappedRelations() {
-		$this->mappedRelations = array();
-	}
 
 	/**
 	 * Find the RemoteID for a specific has_one
@@ -522,5 +522,14 @@ class DataObjectImporter extends Object {
 		$localObject = $class::create();
 		$this->updateLocalObject($localObject, $remoteObject);
 		return $localObject;
+	}
+
+	/**
+	 * Clear temporary data
+	 */
+	public function flush() {
+		$this->mappedRelations = array();
+		$this->remoteObjects = null;
+		gc_collect_cycles();
 	}
 }
