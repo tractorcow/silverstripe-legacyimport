@@ -4,29 +4,17 @@
 class DataObjectImporter extends Object {
 
 	/**
-	 * Just add new items regardless of identification
+	 * Add new items which don't exist on the new site.
 	 */
 	const STRATEGY_ADD = 'Add';
 
 	/**
-	 * Add any objects which don't exist, but identify matching objects without updating them
-	 */
-	const STRATEGY_ADD_OR_IDENTIFY = 'AddOrIdentify';
-
-	/**
-	 * Update items but don't add new ones.
-	 * Implies Identify
+	 * Update data from the old site to the new one.
 	 */
 	const STRATEGY_UPDATE = 'Update';
 
 	/**
-	 * If an object exists in both, update. Otherwise add it.
-	 * Implies Identify
-	 */
-	const STRATEGY_ADD_OR_UPDATE = 'AddOrUpdate';
-
-	/**
-	 * Only identify matching records. Do not match or update any.
+	 * Identify matching records that already exist in both old and new sites.
 	 */
 	const STRATEGY_IDENTIFY = 'Identify';
 
@@ -54,7 +42,7 @@ class DataObjectImporter extends Object {
 	/**
 	 * Merge strategy for this task
 	 *
-	 * @var string
+	 * @var array
 	 */
 	protected $strategy;
 
@@ -229,7 +217,10 @@ class DataObjectImporter extends Object {
 	public function describe() {
 		$desc = get_class($this);
 		if($this->targetClass) $desc .= ' for ' . $this->targetClass;
-		if($this->strategy) $desc .= ' with strategy ' . $this->strategy;
+		if($this->strategy) {
+			$strategy = is_array($this->strategy) ? implode('/', $this->strategy) : $this->strategy;
+			$desc .= " with strategy {$strategy}";
+		}
 		return $desc;
 	}
 
@@ -237,6 +228,11 @@ class DataObjectImporter extends Object {
 	 * Query and map all remote objects to local ones
 	 */
 	public function identifyPass() {
+		// Check extensions
+		if(!Object::has_extension($this->targetClass, 'LegacyDataObject')) {
+			throw new Exception($this->targetClass . " does not have the LegacyDataObject extension");
+		}
+
 		// If we are doing a basic add then there's no identification or merging necessary
 		if(!$this->canIdentify()) {
 			$this->task->message(' * Skipping identification for add only strategy');
@@ -276,18 +272,26 @@ class DataObjectImporter extends Object {
 	}
 
 	/**
+	 * Check if a given strategy is allowed
+	 *
+	 * @param string $strategy strategy name
+	 * @return bool
+	 */
+	protected function hasStrategy($strategy) {
+		if(is_array($this->strategy)) {
+			return in_array($strategy, $this->strategy);
+		} else {
+			return $this->strategy === $strategy;
+		}
+	}
+
+	/**
 	 * Determine if the strategy allows objects to be added
 	 *
 	 * @return bool
 	 */
 	protected function canAdd() {
-		switch($this->strategy) {
-			case self::STRATEGY_IDENTIFY:
-			case self::STRATEGY_UPDATE:
-				return false;
-			default:
-				return true;
-		}
+		return $this->hasStrategy(self::STRATEGY_ADD);
 	}
 
 	/**
@@ -296,14 +300,7 @@ class DataObjectImporter extends Object {
 	 * @return bool
 	 */
 	protected function canUpdate() {
-		switch($this->strategy) {
-			case self::STRATEGY_IDENTIFY:
-			case self::STRATEGY_ADD:
-			case self::STRATEGY_ADD_OR_IDENTIFY:
-				return false;
-			default:
-				return true;
-		}
+		return $this->hasStrategy(self::STRATEGY_UPDATE);
 	}
 
 	/**
@@ -312,7 +309,7 @@ class DataObjectImporter extends Object {
 	 * @return bool
 	 */
 	protected function canIdentify() {
-		return $this->strategy !== self::STRATEGY_ADD;
+		return $this->hasStrategy(self::STRATEGY_IDENTIFY);
 	}
 
 	/**
@@ -373,6 +370,8 @@ class DataObjectImporter extends Object {
 			}
 
 			// If allowed, create a new object
+			// If this step has an add only strategy, then this step relies on getImportableObjects
+			// to filter out objects that have already been added.
 			if(empty($localObject) && $this->canAdd()) {
 				// Make a new object
 				$this->createLocalFromRemoteObject($remoteObject);
