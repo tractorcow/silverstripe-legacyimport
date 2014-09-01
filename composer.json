@@ -1,0 +1,16 @@
+{
+    "name": "tractorcow/silverstripe-legacyimport",
+    "description": "Import old 2.4 sites into 3.1",
+    "license": "BSD-3-Clause",
+	"keywords": ["silverstripe", "import", "migrate"],
+    "authors": [
+        {
+            "name": "Damian Mooyman",
+            "email": "damian@silverstripe.com"
+        }
+    ],
+    "require": {
+		"silverstripe/framework": "~3.1",
+		"silverstripe/cms": "~3.1"
+	}
+}

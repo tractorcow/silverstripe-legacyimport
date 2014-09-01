@@ -33,22 +33,24 @@ LegacyImportTask:
     - importer: DataObjectImporter
       class: Group
       # Don't update groups, but identify links
-      strategy: Identify
+      strategy:
+        - Identify
       # Identify matching groups by code
       idcolumns:
         - Code
     - importer: SiteTreeImporter
       # Just import top level pages, but don't try to update pages with existing url segments
-      strategy: AddOrUpdate
+      strategy:
+        - Add
+        - Update
       class: ForumHolder
       where:
 		- '"ParentID" = 0'
-      idcolumns:
-        - URLSegment
-		- ParentID
     - importer: DataObjectImporter
       class: Member
-      strategy: AddOrIdentify
+      strategy:
+        - Add
+        - Identify
       idcolumns:
         - Email
 ```
@@ -79,12 +81,12 @@ identified objects is created.
 
 ### import
 
-All objects are created (as allowed) or updated (as allowed)
+All objects are created (as allowed) or updated (as allowed). Some relations will be hooked up (has_one) as long
+as all necessary related objects are available, and have been identified in prior tasks.
 
 ### link
 
-All has_one and many_many relations are generated between all matched objects, using the mapping table to determine
-the mapping between different IDs on each server
+A final check-all objects task is run to hook up many_many relations and any other outstanding has_ones.
 
 ## Importers
 
@@ -94,13 +96,16 @@ These are the following importers and their supported strategies:
 
 This is the basic importer, and can import just about any object.
 
-You can use one of the following strategies:
+You can use one or more of the following strategies:
 
-* Add - Objects are added from the remote server without matching against the local ones
-* AddOrIdentify - Object are added from the remote server, but only if a matched record isn't found.
-* AddOrUpdate - Objects are added if they don't exist, or updated if they are
-* Identify - Only a mapping table record is created for this step if a matched record can be found.
-* Update - If a record is found it is updated, but otherwise a new one won't be added
+* Add - New objects which don't exist locally are added. If doing Add without Identify, then
+  you don't need to use idcolumns, since no comparisons will be made.
+* Identify - Determine any mapping between local and remote objects. This pass will use the 'idcolumns'
+  config to identify matches between objects. Note that if you use relations (E.g. ParentID) then be careful
+  where objects might have different IDs across databases. This is ok if using ParentID = 0 as a filter.
+* Update - If a record is found it is updated. Will not work by itself, since it either needs Identify or Add
+  in either the same, or a prior task. If used with Identify it will update all matching records. If used with Add
+  it will update all records which were originally added, but were changed since the last import.
 
 ### AssetImporter
 
