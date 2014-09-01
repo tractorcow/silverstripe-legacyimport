@@ -123,14 +123,8 @@ class DataObjectImporter extends Object {
 	 * @return DataList
 	 */
 	protected function getUnmatchedLocalObjects() {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
 		return $this->getLocalObjects()
-			->leftJoin(
-				'LegacyDataObject',
-				"\"{$baseClass}\".\"ID\" = \"LegacyDataObject\".\"LocalID\" AND
-				 \"LegacyDataObject\".\"ObjectClass\" = '".Convert::raw2sql($baseClass)."'"
-			)
-			->where("\"LegacyDataObject\".\"ID\" IS NULL");
+			->filter('LegacyID', 0);
 	}
 
 	/**
@@ -139,13 +133,8 @@ class DataObjectImporter extends Object {
 	 * @return DataList
 	 */
 	protected function getMatchedLocalObjects() {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
 		return $this->getLocalObjects()
-			->innerJoin(
-				'LegacyDataObject',
-				"\"{$baseClass}\".\"ID\" = \"LegacyDataObject\".\"LocalID\" AND
-				 \"LegacyDataObject\".\"ObjectClass\" = '".Convert::raw2sql($baseClass)."'"
-			);
+			->exclude('LegacyID', 0);
 	}
 
 	/**
@@ -155,8 +144,11 @@ class DataObjectImporter extends Object {
 	 */
 	protected function getUnmatchedRemoteObjects() {
 		$remoteObjects = $this->getRemoteObjects();
-		$matchedIDs = $this->findMatchings()->sort('"RemoteID" ASC')->column('RemoteID');
-		if(empty($matchedIDs)) return $remoteObjects;
+		$legacyIDs = $this
+			->getMatchedLocalObjects()
+			->sort('"LegacyID" ASC')
+			->column('LegacyID');
+		if(empty($legacyIDs)) return $remoteObjects;
 
 		// Odd performance optimisation begins here
 
@@ -167,10 +159,10 @@ class DataObjectImporter extends Object {
 		foreach($remoteObjects as $remoteObject) {
 			$id = $remoteObject->ID;
 			// Pop items from start of matches until we find one that might be the current object
-			while($matchedIDs && (reset($matchedIDs) < $id)) {
-				array_shift($matchedIDs);
+			while($legacyIDs && (reset($legacyIDs) < $id)) {
+				array_shift($legacyIDs);
 			}
-			if($matchedIDs && reset($matchedIDs) == $id) continue;
+			if($legacyIDs && reset($legacyIDs) == $id) continue;
 			$matched[] = $remoteObject;
 		}
 		return new ArrayList($matched);
@@ -182,8 +174,11 @@ class DataObjectImporter extends Object {
 	 * @return ArrayList
 	 */
 	protected function getMatchedRemoteObjects() {
-		$matchedIDs = $this->findMatchings()->sort('"RemoteID" ASC')->column('RemoteID');
-		if(empty($matchedIDs)) return ArrayList::create();
+		$legacyIDs = $this
+			->getMatchedLocalObjects()
+			->sort('"LegacyID" ASC')
+			->column('LegacyID');
+		if(empty($legacyIDs)) return ArrayList::create();
 
 		// Odd performance optimisation begins here
 
@@ -195,10 +190,10 @@ class DataObjectImporter extends Object {
 		foreach($remoteObjects as $remoteObject) {
 			$id = $remoteObject->ID;
 			// Pop items from start of matches until we find one that might be the current object
-			while($matchedIDs && (reset($matchedIDs) < $id)) {
-				array_shift($matchedIDs);
+			while($legacyIDs && (reset($legacyIDs) < $id)) {
+				array_shift($legacyIDs);
 			}
-			if($matchedIDs && reset($matchedIDs) == $id) $matched[] = $remoteObject;
+			if($legacyIDs && reset($legacyIDs) == $id) $matched[] = $remoteObject;
 		}
 		return new ArrayList($matched);
 	}
@@ -206,7 +201,7 @@ class DataObjectImporter extends Object {
 	/**
 	 * Select all remote objects given the query parameters sorted by ID
 	 *
-	 * @return array
+	 * @return ArrayList
 	 */
 	protected function getRemoteObjects() {
 		if($this->remoteObjects) return $this->remoteObjects;
@@ -267,8 +262,8 @@ class DataObjectImporter extends Object {
 			$remoteData = $this->findRemoteObject($localObject->toMap());
 			if($remoteData) {
 				// Given the newly matched item save it
-				$remoteID = $remoteData['ID'];
-				$this->addMatching($localObject->ID, $remoteID);
+				$localObject->LegacyID = $remoteData->ID;
+				$localObject->write();
 			}
 			
 			// Show progress indicator
@@ -321,37 +316,50 @@ class DataObjectImporter extends Object {
 	}
 
 	/**
-	 * Query and create all remote objects, making sure to set all has_one fields to 0
+	 * Determine list of remote objects to import, based on current strategy
 	 */
-	public function importPass() {
+	protected function getImportableObjects() {
 		// Optimise list of items to import
 		if($this->canUpdate() && $this->canAdd()) {
 			// Add or Update operations should look at all objects
 			$remoteObjects = $this->getRemoteObjects();
 			$remoteCount = $remoteObjects->count();
 			$this->task->message(" * Importing {$remoteCount} remote records");
+			return $remoteObjects;
 
 		} elseif($this->canUpdate()) {
 			// If only updating then only limit to matched records
 			$remoteObjects = $this->getMatchedRemoteObjects();
 			$remoteCount = $remoteObjects->count();
 			$this->task->message(" * Importing {$remoteCount} remote records (limited to identified records)");
-			
+			return $remoteObjects;
+
 		} elseif($this->canAdd()) {
 			// If update isn't allowed we don't need to bother with those records
 			$remoteObjects = $this->getUnmatchedRemoteObjects();
 			$remoteCount = $remoteObjects->count();
 			$this->task->message(" * Importing {$remoteCount} remote records (limited to new records)");
-			
+			return $remoteObjects;
+
 		} else {
 			$this->task->message(' * Skipping import for identify only strategy');
-			return;
+			return null;
 		}
+	}
 
+	/**
+	 * Query and create all remote objects, making sure to set all has_one fields to 0
+	 */
+	public function importPass() {
+		// Prepare list of objects for import
+		$remoteObjects = $this->getImportableObjects();
+		if($remoteObjects === null) return;
+		
 		// Add all objects
 		$updated = 0;
 		$added = 0;
 		$total = 0;
+		$remoteCount = $remoteObjects->count();
 		foreach($remoteObjects as $remoteObject) {
 			// Show progress indicator
 			$this->task->progress(++$total, $remoteCount);
@@ -379,83 +387,22 @@ class DataObjectImporter extends Object {
 	 * Run over all imported objects and link them to their respective associative objects
 	 */
 	public function linkPass() {
-		
-	}
+		$this->flushMappedRelations();
 
-	/**
-	 * Note identification of local object with a remote one
-	 *
-	 * @param int $localID
-	 * @param int $remoteID
-	 */
-	protected function addMatching($localID, $remoteID) {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
-		$object = LegacyDataObject::get()
-			->filter('ObjectClass', $baseClass)
-			->filterAny(array(
-				'RemoteID' => $remoteID,
-				'LocalID' => $localID
-			))
-			->first();
-		$object = $object ?: LegacyDataObject::create();
-		$object->ObjectClass = $baseClass;
-		$object->RemoteID = $remoteID;
-		$object->LocalID = $localID;
-		$object->write();
-	}
-
-	/**
-	 * Get all matchings for the current class
-	 *
-	 * @return DataList
-	 */
-	protected function findMatchings() {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
-		return LegacyDataObject::get()
-			->filter(array(
-				'ObjectClass' => $baseClass
-			));
-	}
-
-	/**
-	 * Find any previously matching for a given remote object
-	 *
-	 * @param int $remoteID
-	 * @return LegacyDataObject Matching data for the given remote ID
-	 */
-	protected function findMatchingByRemote($remoteID) {
-		return $this
-			->findMatchings()
-			->filter('RemoteID', $remoteID)
-			->first();
-	}
-
-	/**
-	 * Find any previously matching for a given local object
-	 *
-	 * @param int $localID
-	 * @return LegacyDataObject Matching data for the given local ID
-	 */
-	protected function findMatchingByLocal($localID) {
-		$baseClass = ClassInfo::baseDataClass($this->targetClass);
-		return LegacyDataObject::get()
-			->filter(array(
-				'ObjectClass' => $baseClass,
-				'LocalID' => $localID
-			))->first();
+		// Todo : link objects which may not have been linkable during import
 	}
 
 	/**
 	 * Retrieves any previously identified local object based on remote ID
 	 *
-	 * @param int $remoteID ID of remote object to match against
+	 * @param int $legacyID ID of remote object to match against
 	 * @return DataObject The matched local dataobject if it can be found
 	 */
-	protected function findMatchedLocalObject($remoteID) {
-		$matching = $this->findMatchingByRemote($remoteID);
-		if($matching) {
-			return $this->getLocalObjects()->byID($matching->LocalID);
-		}
+	protected function findMatchedLocalObject($legacyID) {
+		return $this
+			->getLocalObjects()
+			->filter('LegacyID', $legacyID)
+			->first();
 	}
 
 	/**
@@ -477,7 +424,7 @@ class DataObjectImporter extends Object {
 	 * Finds remote dataobject which matches the given $data
 	 *
 	 * @param array $data array of data to query against
-	 * @return array Data for remote object if found
+	 * @return ArrayData Data for remote object if found
 	 */
 	protected function findRemoteObject($data) {
 		$items = $this->getRemoteObjects();
@@ -485,7 +432,48 @@ class DataObjectImporter extends Object {
 			$value = isset($data[$column]) ? $data[$column] : null;
 			$items = $items->filter($column, $value);
 		}
-		return $items->first();
+		if($result = $items->first()) return new ArrayData($result);
+	}
+
+	protected $mappedRelations = array();
+
+	protected function flushMappedRelations() {
+		$this->mappedRelations = array();
+	}
+
+	/**
+	 * Find the RemoteID for a specific has_one
+	 *
+	 * @param string $field Field name (excluding ID)
+	 * @param string $legacyID ID on remote db
+	 * @return mixed Local ID that matches the $legacyID for the given has_one field, null if not findable,
+	 * or 0 if not found
+	 */
+	protected function findMappedRelation($field, $legacyID) {
+		// Return cached result
+		if(isset($this->mappedRelations[$field][$legacyID])) {
+			return $this->mappedRelations[$field][$legacyID];
+		}
+
+		// Skip if no relation
+		$singleton = singleton($this->targetClass);
+		$relationClass = $singleton->has_one($field);
+		if(empty($relationClass)) return null;
+
+		// Skip if relation class isn't an imported class
+		$relationSingleton = singleton($relationClass);
+		if(!$relationSingleton->db('LegacyID')) return null;
+
+		// Find related object with this legacyID
+		$localObject = $relationClass::get()->filter('LegacyID', $legacyID)->first();
+		$localID = $localObject ? $localObject->ID : 0;
+
+		// Save result, even if it was a failed match
+		if(!isset($this->mappedRelations[$field])) {
+			$this->mappedRelations[$field] = array();
+		}
+		$this->mappedRelations[$field][$legacyID] = $localID;
+		return $localID;
 	}
 
 	/**
@@ -496,13 +484,26 @@ class DataObjectImporter extends Object {
 	 */
 	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
 		foreach($remoteObject->toMap() as $field => $value) {
-			// Skip all relations, since ID or foreign IDs on the other server don't make sense here
-			if(preg_match('/.*ID$/', $field)) continue;
-			// Don't change class
-			if($field === 'ClassName') continue;
+			// Skip ID and class
+			if(in_array($field, array('ClassName', 'ID'))) continue;
+
+			// Skip obsolete fields
+			if(preg_match('/^_obsolete.*/', $field)) continue;
 			
-			$localObject->$field = $value;
+			// While updating map any relation field that we can
+			if(preg_match('/(?<relation>.+)ID$/', $field, $matches)) {
+				// Try to find local ID that corresponds to this relation
+				$localID = $this->findMappedRelation($matches['relation'], $value);
+				// Skip empty
+				if($localID) $localObject->$field = $localID;
+			} else {
+				$localObject->$field = $value;
+			}
 		}
+		// Save mapping ID
+		// Note: If using a non-identifying strategy (e.g. Add) then this step is important
+		// to ensure that this object is not re-added in subsequent imports
+		$localObject->LegacyID = $remoteObject->ID;
 		$localObject->write();
 	}
 
@@ -517,15 +518,10 @@ class DataObjectImporter extends Object {
 		$class = ($remoteObject->ClassName && is_a($remoteObject->ClassName, $this->targetClass, true))
 			? $remoteObject->ClassName
 			: $this->targetClass;
-		$localObject = $class::create();
 
 		// Populate
+		$localObject = $class::create();
 		$this->updateLocalObject($localObject, $remoteObject);
-
-		// Immediately save identification
-		// Note: If using a non-identifying strategy (e.g. Add) then this step is important
-		// to ensure that this object is not re-added in subsequent imports
-		$this->addMatching($localObject->ID, $remoteObject->ID);
 		return $localObject;
 	}
 }

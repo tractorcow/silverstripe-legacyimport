@@ -21,23 +21,22 @@ class SiteTreeImporter extends DataObjectImporter {
 	protected function identifySubtree($remoteItems, $localParentID, $remoteParentID) {
 		// Loop through each subpage of this parent
 		foreach(SiteTree::get()->filter('ParentID', $localParentID) as $localPage) {
-			$remoteID = null;
 			
-			// Scan for previously found matches for this page
-			if($match = $this->findMatchingByLocal($localPage->ID)) {
-				$remoteID = $match->RemoteID;
-			} elseif($remoteParentID !== null) {
+			// Check if this page is already matched to a remote object
+			$legacyID = $localPage->LegacyID;
+			if(empty($legacyID) && ($remoteParentID !== null)) {
 				// If we have a known remote parent then filter possible children to find a match
 				$remoteFilter = array_merge($localPage->toMap(), array('ParentID' => $remoteParentID));
 				$remoteData = $this->findRemoteObject($remoteFilter);
 				if($remoteData) {
 					// Given the newly matched item save it
-					$remoteID = $remoteData->ID;
-					$this->addMatching($localPage->ID, $remoteID);
+					$legacyID = $remoteData->ID;
+					$localPage->LegacyID = $legacyID;
+					$localPage->write();
 				}
 			}
 
-			$this->identifySubtree($remoteItems, $localPage->ID, $remoteID);
+			$this->identifySubtree($remoteItems, $localPage->ID, $legacyID);
 		}
 	}
 

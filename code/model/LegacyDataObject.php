@@ -1,16 +1,11 @@
 <?php
 
 /**
- * @property string $ObjectClass Class name
- * @property int $LocalID Local Id of the dataobject
- * @property int $RemoteID Remote ID of the dataobject
  * saved locally and all relations have been attached.
  */
-class LegacyDataObject extends DataObject {
+class LegacyDataObject extends DataExtension {
 	
 	private static $db = array(
-		'ObjectClass' => 'Varchar(255)',
-		'LocalID' => 'Int',
-		'RemoteID' => 'Int'
+		'LegacyID' => 'Int' // ID of this object on the legacy db
 	);
 }
