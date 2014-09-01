@@ -3,6 +3,7 @@
     "description": "Import old 2.4 sites into 3.1",
     "license": "BSD-3-Clause",
 	"keywords": ["silverstripe", "import", "migrate"],
+	"type": "silverstripe-module",
     "authors": [
         {
             "name": "Damian Mooyman",
