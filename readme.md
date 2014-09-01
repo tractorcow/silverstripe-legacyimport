@@ -65,6 +65,29 @@ The actual process will perform the following tasks
 * link page relations
 * link member relations
 
+## Running task groups
+
+If you want to setup different groups of tasks to run, just replace the 'tasks' in the config with 
+another key and use the `tasks=mytasks` querystring parameter instead.
+
+```yaml
+---
+Name: mylegacyimport
+---
+LegacyImportTask:
+  fixpermissions:
+    - importer: DataObjectImporter
+      class: Group
+      strategy:
+        - Update
+```
+
+This could be run with the following command.
+
+`./framework/sake dev/tasks/LegacyImportTask flush=all tasks=fixpermissions`
+
+## Running just a single pass
+
 If you want to run a single pass you can skip to one using the 'pass' param.
 
 `./framework/sake dev/tasks/LegacyImportTask flush=all pass=identify`

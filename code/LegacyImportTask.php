@@ -53,7 +53,9 @@ class LegacyImportTask extends BuildTask {
 	 * @return SS_HTTPResponse
 	 */
 	public function run($request) {
-		$this->message('Beginning import');
+		$taskGroup = $request->getVar('tasks') ?: 'tasks';
+		$this->message("Beginning import tasks {$taskGroup}");
+
 
 		$this->connectToRemoteSite();
 
@@ -62,42 +64,43 @@ class LegacyImportTask extends BuildTask {
 			$this->message("Resuming at {$pass} pass");
 			switch($pass) {
 				case 'identify':
-					$this->identifyPass();
+					$this->identifyPass($taskGroup);
 					return;
 				case 'import':
-					$this->importPass();
+					$this->importPass($taskGroup);
 					return;
 				case 'link':
-					$this->linkPass();
+					$this->linkPass($taskGroup);
 					return;
 			}
 		}
 
-		$this->identifyPass();
-		$this->importPass();
-		$this->linkPass();
+		$this->identifyPass($taskGroup);
+		$this->importPass($taskGroup);
+		$this->linkPass($taskGroup);
 	}
 
 	/**
-	 * List of tasks
+	 * List of task groups
 	 *
 	 * @var array
 	 */
-	protected $tasks = null;
+	protected $tasks = array();
 
 	/**
 	 * Get the list of all defined tasks
 	 *
+	 * @param string $taskGroup Name of task group to run
 	 * @return array
 	 */
-	public function tasks() {
-		if($this->tasks) return $this->tasks;
-		$taskConfig = static::config()->tasks;
-		$this->tasks = array();
+	public function tasks($taskGroup) {
+		if(isset($this->tasks[$taskGroup])) return $this->tasks[$taskGroup];
+		$taskConfig = static::config()->get($taskGroup);
+		$this->tasks[$taskGroup] = array();
 		foreach($taskConfig as $config) {
-			$this->tasks[] = $config['importer']::create($this, $config);
+			$this->tasks[$taskGroup][] = $config['importer']::create($this, $config);
 		}
-		return $this->tasks;
+		return $this->tasks[$taskGroup];
 	}
 
 	/**
@@ -122,11 +125,13 @@ class LegacyImportTask extends BuildTask {
 
 	/**
 	 * Generate mapping of remote object ids to local object ids
+	 *
+	 * @param string $taskGroup Name of task group to run
 	 */
-	protected function identifyPass() {
+	protected function identifyPass($taskGroup) {
 		$this->message('');
 		$this->message('== Identifying all objects ==');
-		foreach($this->tasks() as $task) {
+		foreach($this->tasks($taskGroup) as $task) {
 			$this->message('Identifying ' . $task->describe());
 			$task->identifyPass();
 			$task->flush();
@@ -135,11 +140,13 @@ class LegacyImportTask extends BuildTask {
 
 	/**
 	 * Run through the import strategy, importing all objects available
+	 *
+	 * @param string $taskGroup Name of task group to run
 	 */
-	protected function importPass() {
+	protected function importPass($taskGroup) {
 		$this->message('');
 		$this->message('== Importing all objects ==');
-		foreach($this->tasks() as $task) {
+		foreach($this->tasks($taskGroup) as $task) {
 			$this->message('Importing ' . $task->describe());
 			$task->importPass();
 			$task->flush();
@@ -148,11 +155,13 @@ class LegacyImportTask extends BuildTask {
 
 	/**
 	 * Link all saved objects to any relations
+	 *
+	 * @param string $taskGroup Name of task group to run
 	 */
-	protected function linkPass() {
+	protected function linkPass($taskGroup) {
 		$this->message('');
 		$this->message('== Linking relations for all imported objects ==');
-		foreach($this->tasks() as $task) {
+		foreach($this->tasks($taskGroup) as $task) {
 			$this->message('Updating links for ' . $task->describe());
 			$task->linkPass();
 			$task->flush();
