@@ -4,14 +4,17 @@ Import your 2.x sites into 3.x!
 
 ## Setting up DB credentials
 
-You'll need to set the following in your _ss_environment.php to point to the old site DB
+You'll need to set the following in your `_ss_environment.php` file to point to the old site's database:
 
-SS_REMOTE_DATABASE_USERNAME
-SS_REMOTE_DATABASE_PASSWORD
-SS_REMOTE_DATABASE_CLASS
-SS_REMOTE_DATABASE_SERVER
-SS_REMOTE_DATABASE_PORT
-SS_REMOTE_DATABASE_TIMEZONE
+ * SS_REMOTE_DATABASE_SERVER
+ * SS_REMOTE_DATABASE_USERNAME
+ * SS_REMOTE_DATABASE_PASSWORD
+ * SS_REMOTE_DATABASE_NAME
+ * SS_REMOTE_DATABASE_CLASS (optional, defaults to MySQLDatabase)
+ * SS_REMOTE_DATABASE_PORT (optional)
+ * SS_REMOTE_DATABASE_SCHEMA (optional)
+ * SS_REMOTE_DATABASE_TIMEZONE (optional)
+ * SS_REMOTE_DATABASE_PATH (optional)
 
 ## Running the importer
 
