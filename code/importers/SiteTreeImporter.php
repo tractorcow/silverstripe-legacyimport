@@ -2,13 +2,13 @@
 
 class SiteTreeImporter extends DataObjectImporter {
 	
-	public function __construct(LegacyImportTask $task, $parameters) {
+	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		$this->targetClass = 'SiteTree';
 		$this->idColumns = array(
 			'ClassName',
 			'URLSegment'
 		);
-		parent::__construct($task, $parameters);
+		parent::__construct($task, $parameters, $helpers);
 	}
 
 	/**

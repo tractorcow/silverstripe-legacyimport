@@ -8,12 +8,12 @@ class AssetImporter extends DataObjectImporter {
 	const STRATEGY_ONDEMAND = 'OnDemand';
 	const STRATEGY_PRELOAD = 'Preload';
 	
-	public function __construct(LegacyImportTask $task, $parameters) {
+	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		$this->targetClass = 'File';
 		$this->idColumns = array(
 			'Filename'
 		);
-		parent::__construct($task, $parameters);
+		parent::__construct($task, $parameters, $helpers);
 	}
 
 	public function importPass() {

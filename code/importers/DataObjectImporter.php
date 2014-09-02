@@ -60,11 +60,27 @@ class DataObjectImporter extends Object {
 	 */
 	protected $task;
 
-	public function __construct(LegacyImportTask $task, $parameters) {
+	/**
+	 * Helpers for linking, matching other objects, etc
+	 *
+	 * @var array[LegacyHelper]
+	 */
+	protected $helpers = array();
+
+	/**
+	 * Create a dataobject importer
+	 *
+	 * @param LegacyImportTask $task Parent task
+	 * @param array $parameters Parameter input
+	 * @param array $helpers List of helper classes
+	 * @throws InvalidArgumentException
+	 */
+	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		parent::__construct();
 
 		// Save running task
 		$this->task = $task;
+		$this->helpers = $helpers;
 
 		// Importn parameters
 		if(!empty($parameters['strategy'])) {
@@ -386,8 +402,6 @@ class DataObjectImporter extends Object {
 	 * Run over all imported objects and link them to their respective associative objects
 	 */
 	public function linkPass() {
-
-		// Todo : link objects which may not have been linkable during import
 	}
 
 	/**
@@ -499,6 +513,12 @@ class DataObjectImporter extends Object {
 				$localObject->$field = $value;
 			}
 		}
+		
+		// Let helpers update each object
+		foreach($this->helpers as $helper) {
+			$helper->updateLocalObject($localObject, $remoteObject);
+		}
+
 		// Save mapping ID
 		// Note: If using a non-identifying strategy (e.g. Add) then this step is important
 		// to ensure that this object is not re-added in subsequent imports

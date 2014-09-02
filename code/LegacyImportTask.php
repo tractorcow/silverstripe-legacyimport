@@ -49,13 +49,28 @@ class LegacyImportTask extends BuildTask {
 	}
 
 	/**
+	 * Output an error
+	 *
+	 * @param string $message
+	 */
+	public function error($message) {
+		if($this->quiet) return;
+
+		if(Director::is_cli()) {
+			$text = SS_Cli::text(date('Y-m-d H:i:s').': '.$message, 'red')."\n";
+			file_put_contents('php://stderr', $text, FILE_APPEND);
+		} else {
+			$this->message($message);
+		}
+	}
+
+	/**
 	 * @param SS_HTTPRequest $request
 	 * @return SS_HTTPResponse
 	 */
 	public function run($request) {
 		$taskGroup = $request->getVar('tasks') ?: 'tasks';
 		$this->message("Beginning import tasks {$taskGroup}");
-
 
 		$this->connectToRemoteSite();
 
@@ -95,10 +110,19 @@ class LegacyImportTask extends BuildTask {
 	 */
 	public function tasks($taskGroup) {
 		if(isset($this->tasks[$taskGroup])) return $this->tasks[$taskGroup];
+		
+		// Make all helpers
+		$helperConfig = static::config()->helpers;
+		$helpers = array();
+		if($helperConfig) foreach($helperConfig as $helper) {
+			$helpers[] = $helper['helper']::create($this, $helper);
+		}
+
+		// Make all tasks
 		$taskConfig = static::config()->get($taskGroup);
 		$this->tasks[$taskGroup] = array();
 		foreach($taskConfig as $config) {
-			$this->tasks[$taskGroup][] = $config['importer']::create($this, $config);
+			$this->tasks[$taskGroup][] = $config['importer']::create($this, $config, $helpers);
 		}
 		return $this->tasks[$taskGroup];
 	}
