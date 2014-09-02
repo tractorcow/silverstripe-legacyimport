@@ -19,21 +19,21 @@ if(defined('SS_REMOTE_DATABASE_USERNAME') && defined('SS_REMOTE_DATABASE_PASSWOR
 
 	// Set the port if called for
 	if(defined('SS_REMOTE_DATABASE_PORT')) {
-		$databaseConfig['port'] = SS_REMOTE_DATABASE_PORT;
+		$remoteDatabaseConfig['port'] = SS_REMOTE_DATABASE_PORT;
 	}
 
 	// Set the timezone if called for
 	if (defined('SS_REMOTE_DATABASE_TIMEZONE')) {
-		$databaseConfig['timezone'] = SS_REMOTE_DATABASE_TIMEZONE;
+		$remoteDatabaseConfig['timezone'] = SS_REMOTE_DATABASE_TIMEZONE;
 	}
 
 	// For schema enabled drivers:
 	if(defined('SS_REMOTE_DATABASE_SCHEMA')) {
-		$databaseConfig["schema"] = SS_REMOTE_DATABASE_SCHEMA;
+		$remoteDatabaseConfig["schema"] = SS_REMOTE_DATABASE_SCHEMA;
 	}
 
 	// For schema enabled drivers:
 	if(defined('SS_REMOTE_DATABASE_PATH')) {
-		$databaseConfig["path"] = SS_REMOTE_DATABASE_PATH;
+		$remoteDatabaseConfig["path"] = SS_REMOTE_DATABASE_PATH;
 	}
 }
