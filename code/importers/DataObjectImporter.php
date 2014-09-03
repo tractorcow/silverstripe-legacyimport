@@ -1,7 +1,7 @@
 <?php
 
 
-class DataObjectImporter extends Object {
+class DataObjectImporter extends LegacyImporter {
 
 	/**
 	 * Add new items which don't exist on the new site.
@@ -54,20 +54,6 @@ class DataObjectImporter extends Object {
 	protected $idColumns = array();
 
 	/**
-	 * Parent build task to report to
-	 *
-	 * @var LegacyImportTask
-	 */
-	protected $task;
-
-	/**
-	 * Helpers for linking, matching other objects, etc
-	 *
-	 * @var array[LegacyHelper]
-	 */
-	protected $helpers = array();
-
-	/**
 	 * Create a dataobject importer
 	 *
 	 * @param LegacyImportTask $task Parent task
@@ -76,11 +62,7 @@ class DataObjectImporter extends Object {
 	 * @throws InvalidArgumentException
 	 */
 	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
-		parent::__construct();
-
-		// Save running task
-		$this->task = $task;
-		$this->helpers = $helpers;
+		parent::__construct($task, $parameters, $helpers);
 
 		// Importn parameters
 		if(!empty($parameters['strategy'])) {
@@ -104,13 +86,6 @@ class DataObjectImporter extends Object {
 			throw new InvalidArgumentException("Missing strategy for step ".get_class($this));
 		}
 	}
-
-	/**
-	 * Cache of queried remote objects
-	 *
-	 * @var ArrayList
-	 */
-	protected $remoteObjects = null;
 
 	/**
 	 * Get all local objects
@@ -142,34 +117,43 @@ class DataObjectImporter extends Object {
 	}
 
 	/**
+	 * Get all remote objects which have been created or edited since last import
+	 *
+	 * @return ArrayList
+	 */
+	protected function getNewOrChangedRemoteObjects() {
+		$query = $this->getRemoteObjectsQuery();
+		$query->whereAny(array(
+			'"_ImportedID" = 0',
+			'"_ImportedDate" < "LastEdited"'
+		));
+		$items = iterator_to_array($this->task->query($query));
+		return new ArrayList($items);
+	}
+
+	/**
+	 * Get all remote objects which have been edited since last import
+	 *
+	 * @return ArrayList
+	 */
+	protected function getChangedRemoteObjects() {
+		$query = $this->getRemoteObjectsQuery();
+		$query->addWhere('"_ImportedID" > 0');
+		$query->addWhere('"_ImportedDate" < "LastEdited"');
+		$items = iterator_to_array($this->task->query($query));
+		return new ArrayList($items);
+	}
+
+	/**
 	 * Select all remote objects yet unmatched
 	 *
 	 * @return ArrayList
 	 */
 	protected function getUnmatchedRemoteObjects() {
-		$remoteObjects = $this->getRemoteObjects();
-		$legacyIDs = $this
-			->getMatchedLocalObjects()
-			->sort('"LegacyID" ASC')
-			->column('LegacyID');
-		if(empty($legacyIDs)) return $remoteObjects;
-
-		// Odd performance optimisation begins here
-
-		// Slightly more optimised array search, based on assumption
-		// that both $matchedIDs and $objects are sorted by ID
-		// Should average to O(n) performance (size of remote objects + size of matches)
-		$matched = array();
-		foreach($remoteObjects as $remoteObject) {
-			$id = $remoteObject->ID;
-			// Pop items from start of matches until we find one that might be the current object
-			while($legacyIDs && (reset($legacyIDs) < $id)) {
-				array_shift($legacyIDs);
-			}
-			if($legacyIDs && reset($legacyIDs) == $id) continue;
-			$matched[] = $remoteObject;
-		}
-		return new ArrayList($matched);
+		$query = $this->getRemoteObjectsQuery();
+		$query->addWhere('"_ImportedID" = 0');
+		$items = iterator_to_array($this->task->query($query));
+		return new ArrayList($items);
 	}
 
 	/**
@@ -178,40 +162,36 @@ class DataObjectImporter extends Object {
 	 * @return ArrayList
 	 */
 	protected function getMatchedRemoteObjects() {
-		$legacyIDs = $this
-			->getMatchedLocalObjects()
-			->sort('"LegacyID" ASC')
-			->column('LegacyID');
-		if(empty($legacyIDs)) return ArrayList::create();
-
-		// Odd performance optimisation begins here
-
-		// Slightly more optimised array search, based on assumption
-		// that both $matchedIDs and $objects are sorted by ID
-		// Should average to O(n) performance (size of remote objects + size of matches)
-		$remoteObjects = $this->getRemoteObjects();
-		$matched = array();
-		foreach($remoteObjects as $remoteObject) {
-			$id = $remoteObject->ID;
-			// Pop items from start of matches until we find one that might be the current object
-			while($legacyIDs && (reset($legacyIDs) < $id)) {
-				array_shift($legacyIDs);
-			}
-			if($legacyIDs && reset($legacyIDs) == $id) $matched[] = $remoteObject;
-		}
-		return new ArrayList($matched);
+		$query = $this->getRemoteObjectsQuery();
+		$query->addWhere('"_ImportedID" > 0');
+		$items = iterator_to_array($this->task->query($query));
+		return new ArrayList($items);
 	}
 
 	/**
-	 * Select all remote objects given the query parameters sorted by ID
+	 * Get list of remote tables for the target dataobject
 	 *
-	 * @return ArrayList
+	 * @return array
 	 */
-	protected function getRemoteObjects() {
-		if($this->remoteObjects) return $this->remoteObjects;
+	protected function getRemoteClassHierarchy() {
+		return ClassInfo::ancestry($this->targetClass, true);
+	}
 
+	/**
+	 * Get the base class for the target dataobject
+	 *
+	 * @return type
+	 */
+	protected function getRemoteBaseTable() {
+		return ClassInfo::baseDataClass($this->targetClass);
+	}
+
+	/**
+	 * @return SQLQuery
+	 */
+	protected function getRemoteObjectsQuery() {
 		// Get all tables to query
-		$tables = ClassInfo::ancestry($this->targetClass, true);
+		$tables = $this->getRemoteClassHierarchy();
 		$baseClass = array_shift($tables);
 
 		// Generate sql query
@@ -220,9 +200,18 @@ class DataObjectImporter extends Object {
 		foreach($tables as $class) {
 			$query->addLeftJoin($class, "\"{$baseClass}\".\"ID\" = \"{$class}\".\"ID\"");
 		}
+		return $query;
+	}
 
-		// Run query and cache
-		return $this->remoteObjects = new ArrayList(iterator_to_array($this->task->query($query)));
+	/**
+	 * Select all remote objects given the query parameters sorted by ID
+	 *
+	 * @return ArrayList
+	 */
+	protected function getRemoteObjects() {
+		$query = $this->getRemoteObjectsQuery();
+		$items = iterator_to_array($this->task->query($query));
+		return new ArrayList($items);
 	}
 
 	/**
@@ -248,6 +237,9 @@ class DataObjectImporter extends Object {
 		if(!Object::has_extension($this->targetClass, 'LegacyDataObject')) {
 			throw new Exception($this->targetClass . " does not have the LegacyDataObject extension");
 		}
+
+		// Update remote table to include _ImportedID column
+		$this->setupRemoteTable();
 
 		// If we are doing a basic add then there's no identification or merging necessary
 		if(!$this->canIdentify()) {
@@ -330,28 +322,30 @@ class DataObjectImporter extends Object {
 
 	/**
 	 * Determine list of remote objects to import, based on current strategy
+	 *
+	 * @return ArrayList
 	 */
 	protected function getImportableObjects() {
 		// Optimise list of items to import
 		if($this->canUpdate() && $this->canAdd()) {
 			// Add or Update operations should look at all objects
-			$remoteObjects = $this->getRemoteObjects();
+			$remoteObjects = $this->getNewOrChangedRemoteObjects();
 			$remoteCount = $remoteObjects->count();
-			$this->task->message(" * Importing {$remoteCount} remote records");
+			$this->task->message(" * Importing {$remoteCount} new or changed records");
 			return $remoteObjects;
 
 		} elseif($this->canUpdate()) {
 			// If only updating then only limit to matched records
-			$remoteObjects = $this->getMatchedRemoteObjects();
+			$remoteObjects = $this->getChangedRemoteObjects();
 			$remoteCount = $remoteObjects->count();
-			$this->task->message(" * Importing {$remoteCount} remote records (limited to identified records)");
+			$this->task->message(" * Importing {$remoteCount} changed records");
 			return $remoteObjects;
 
 		} elseif($this->canAdd()) {
 			// If update isn't allowed we don't need to bother with those records
 			$remoteObjects = $this->getUnmatchedRemoteObjects();
 			$remoteCount = $remoteObjects->count();
-			$this->task->message(" * Importing {$remoteCount} remote records (limited to new records)");
+			$this->task->message(" * Importing {$remoteCount} new records");
 			return $remoteObjects;
 
 		} else {
@@ -505,10 +499,12 @@ class DataObjectImporter extends Object {
 			
 			// While updating map any relation field that we can
 			if(preg_match('/(?<relation>.+)ID$/', $field, $matches)) {
-				// Try to find local ID that corresponds to this relation
-				$localID = $this->findMappedRelation($matches['relation'], $value);
-				// Skip empty
-				if($localID) $localObject->$field = $localID;
+				if($value) {
+					// Try to find local ID that corresponds to this relation
+					$localID = $this->findMappedRelation($matches['relation'], $value);
+					// Skip empty
+					if($localID) $localObject->$field = $localID;
+				}
 			} else {
 				$localObject->$field = $value;
 			}
@@ -524,6 +520,16 @@ class DataObjectImporter extends Object {
 		// to ensure that this object is not re-added in subsequent imports
 		$localObject->LegacyID = $remoteObject->ID;
 		$localObject->write();
+
+		// Save data to remote object
+		$conn = $this->task->getRemoteConnection();
+		$baseTable = $this->getRemoteBaseTable();
+		$conn->query(sprintf(
+			'UPDATE "%s" SET "_ImportedID" = %d, "_ImportedDate" = NOW() WHERE "ID" = %d',
+			$baseTable,
+			intval($localObject->ID),
+			intval($remoteObject->ID)
+		));
 	}
 
 	/**

@@ -141,10 +141,19 @@ class LegacyImportTask extends BuildTask {
 	 * Run a remote query against the remote DB
 	 *
 	 * @param SQLQuery $query
+	 * @return SS_Query
 	 */
 	public function query(SQLQuery $query) {
-		return DB::getConn(self::config()->remote_database)
+		return $this->getRemoteConnection()
 			->query($query->sql());
+	}
+
+	/**
+	 *
+	 * @return SS_Database
+	 */
+	public function getRemoteConnection() {
+		return DB::getConn(self::config()->remote_database);
 	}
 
 	/**

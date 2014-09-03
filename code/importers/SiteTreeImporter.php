@@ -49,6 +49,9 @@ class SiteTreeImporter extends DataObjectImporter {
 			return parent::identifyPass();
 		}
 
+		// Update remote table to include _ImportedID column
+		$this->setupRemoteTable();
+
 		// Identify remote objects
 		$beforeUnmatched = $this->getUnmatchedRemoteObjects()->count();
 
