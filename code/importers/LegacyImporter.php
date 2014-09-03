@@ -22,19 +22,10 @@ abstract class LegacyImporter extends Object {
 	protected function setupRemoteTable() {
 		$conn = $this->task->getRemoteConnection();
 		$baseClass = $this->getRemoteBaseTable();
-		$fields = $conn->fieldList($baseClass);
 
-		// Make _ImportedID column
-		if(!isset($fields['_ImportedID'])) {
-			$this->task->message(' * Creating _ImportedID on remote table ' . $baseClass);
-			$conn->createField($baseClass, '_ImportedID', 'int(11) not null default 0');
-		}
-
-		// Make _ImportedDate column
-		if(!isset($fields['_ImportedDate'])) {
-			$this->task->message(' * Creating _ImportedDate on remote table ' . $baseClass);
-			$conn->createField($baseClass, '_ImportedDate', 'datetime');
-		}
+		// Create columns
+		$this->task->ensureTableHasColumn($conn, $baseClass, '_ImportedID', 'int(11) not null default 0');
+		$this->task->ensureTableHasColumn($conn, $baseClass, '_ImportedDate', 'datetime');
 	}
 
 	/**

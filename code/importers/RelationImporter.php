@@ -36,14 +36,16 @@ class RelationImporter extends LegacyImporter {
 		$this->setupRemoteTable();
 	}
 
+	/**
+	 * Ensure the LegacyID column exists on the local table
+	 */
 	protected function setupLocalTable() {
-		$fields = DB::fieldList($this->tableName);
-
-		// Make _ImportedID column
-		if(!isset($fields['LegacyID'])) {
-			$this->task->message(' * Creating LegacyID on mapping table ' . $this->tableName);
-			DB::createField($this->tableName, 'LegacyID', 'int(11) not null default 0');
-		}
+		$this->task->ensureTableHasColumn(
+			DB::getConn(),
+			$this->tableName,
+			'LegacyID',
+			'int(11) not null default 0'
+		);
 	}
 
 	protected function getRemoteObjectsQuery() {
