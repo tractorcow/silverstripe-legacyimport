@@ -77,9 +77,28 @@ class AssetLinker extends LegacyHelper {
 			$localObject->$field = $value;
 		}
 
+		// Save mapping
+		$this->mapObjects($localObject, $remoteObject);
+	}
+
+	/**
+	 * save mapping betwen these objects
+	 *
+	 * @param File $localObject
+	 * @param ArrayData $remoteObject
+	 */
+	protected function mapObjects(File $localObject, ArrayData $remoteObject) {
 		// Save mapping ID
 		$localObject->LegacyID = $remoteObject->ID;
 		$localObject->write();
+
+		// Save data to remote object
+		$conn = $this->task->getRemoteConnection();
+		$conn->query(sprintf(
+			'UPDATE "File" SET "_ImportedID" = %d, "_ImportedDate" = NOW() WHERE "ID" = %d',
+			intval($localObject->ID),
+			intval($remoteObject->ID)
+		));
 	}
 
 	/**
@@ -130,6 +149,18 @@ class AssetLinker extends LegacyHelper {
 	}
 
 	/**
+	 * Find remote file by condition
+	 *
+	 * @param array $where
+	 */
+	protected function findRemoteFile($where = array()) {
+		$query = $this->makeQuery();
+		if($where) $query->addWhere($where);
+		$remoteFile = $this->task->query($query)->first();
+		if($remoteFile) return new ArrayData($remoteFile);
+	}
+
+	/**
 	 * Create a local file record for a given url
 	 *
 	 * @param string $filename Path relative to site root
@@ -139,11 +170,10 @@ class AssetLinker extends LegacyHelper {
 		// Create folder structure
 		$parentFolder = Folder::find_or_make(preg_replace('/^assets\\//', '', dirname($filename)));
 
-		// Find remote file
-		$query = $this->makeQuery();
-		$query->addWhere('"File"."Filename" LIKE \''.Convert::raw2sql($filename).'\'');
-		$remoteFile = $this->task->query($query)->first();
-		if($remoteFile) $remoteFile = new ArrayData($remoteFile);
+		// Find remote file with this name
+		$remoteFile = $this->findRemoteFile(array(
+			'"File"."Filename" LIKE \''.Convert::raw2sql($filename).'\''
+		));
 
 		// Create local file from this data
 		$className = File::get_class_for_file_extension(pathinfo($filename, PATHINFO_EXTENSION));
@@ -155,6 +185,40 @@ class AssetLinker extends LegacyHelper {
 			$localFile->Name = basename($filename);
 			$localFile->write();
 		}
+		return $localFile;
+	}
+
+	/**
+	 * Check if remote file exists on this server
+	 *
+	 * @param ArrayData $remoteFile
+	 * @return File
+	 */
+	protected function findOrImportFile($remoteFile) {
+		$filename = $remoteFile->Filename;
+
+		// Pull down the remote file to the filesystem
+		$this->copyRemoteFile($filename);
+		
+		// Find matched file
+		$localFile = File::get()
+			->filter("FileName", $filename)
+			->first();
+		if($localFile) {
+			$this->mapObjects($localFile, $remoteFile);
+			return $localFile;
+		}
+
+		// Create local file from this data
+		$className = $remoteFile->ClassName;
+		$localFile = $className::create();
+
+		// Create folder structure
+		$parentFolder = Folder::find_or_make(preg_replace('/^assets\\//', '', dirname($filename)));
+		$localFile->ParentID = $parentFolder->ID;
+
+		// Update content
+		$this->updateLocalFile($localFile, $remoteFile);
 		return $localFile;
 	}
 
@@ -174,7 +238,7 @@ class AssetLinker extends LegacyHelper {
 
 		// Find matched file
 		$localFile = File::get()
-			->filter("FileName:ExactMatch:nocase", $filename)
+			->filter("FileName", $filename)
 			->first();
 
 		// If we don't have a local record, import it from the other server
@@ -194,6 +258,32 @@ class AssetLinker extends LegacyHelper {
 		// Extract all html images
 		$imageURLs = $this->getHTMLImageUrls($localObject);
 		foreach($imageURLs as $imageURL) $this->importFile($imageURL);
+
+		// Now update all has_one => file relations
+		$changed = false;
+		foreach($localObject->has_one() as $relation => $class) {
+			if(!is_a($class, 'File', true)) continue;
+
+			// No need to import if found in a previous step
+			$field = $relation."ID";
+			if($localObject->$field) continue;
+
+			// If the remote object doesn't have this field then can also skip it
+			$remoteFileID = intval($remoteObject->$field);
+			if(empty($remoteFileID)) continue;
+			
+			// Find remote file with this ID
+			$remoteFile = $this->findRemoteFile(array(
+				sprintf('"ID" = %d', intval($remoteFileID))
+			));
+			if(!$remoteFile) return null;
+
+			// Copy file to filesystem and save
+			$localFile = $this->findOrImportFile($remoteFile);
+			$changed = true;
+			$localObject->$field = $localFile->ID;
+		}
+		if($changed) $localObject->write();
 	}
 
 }

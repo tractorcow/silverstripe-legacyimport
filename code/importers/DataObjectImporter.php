@@ -248,6 +248,11 @@ class DataObjectImporter extends LegacyImporter {
 			return;
 		}
 
+		// Check for configuration errors
+		if(empty($this->idColumns)) {
+			throw new Exception("Cannot perform Identify step without idcolumns property on task");
+		}
+
 		// Check before status
 		$beforeUnmatched = $this->getUnmatchedRemoteObjects()->count();
 		if($beforeUnmatched === 0) {
