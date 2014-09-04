@@ -102,7 +102,8 @@ class DataObjectImporter extends LegacyImporter {
 	 * @return DataList
 	 */
 	protected function getUnmatchedLocalObjects() {
-		return $this->getLocalObjects()
+		return $this
+			->getLocalObjects()
 			->filter('LegacyID', 0);
 	}
 
@@ -268,6 +269,17 @@ class DataObjectImporter extends LegacyImporter {
 				// Given the newly matched item save it
 				$localObject->LegacyID = $remoteData->ID;
 				$localObject->write();
+
+				// Match remote object to this, but not _ImportedDate because it may need to
+				// have it's data migrated across
+				$conn = $this->task->getRemoteConnection();
+				$baseTable = $this->getRemoteBaseTable();
+				$conn->query(sprintf(
+					'UPDATE "%s" SET "_ImportedID" = %d WHERE "ID" = %d',
+					$baseTable,
+					intval($localObject->ID),
+					intval($remoteData->ID)
+				));
 			}
 			
 			// Show progress indicator

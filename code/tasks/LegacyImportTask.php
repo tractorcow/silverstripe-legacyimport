@@ -11,9 +11,14 @@ class LegacyImportTask extends ImportTask {
 	 * @return SS_HTTPResponse
 	 */
 	public function run($request) {
+		// Disable filters
+		if(class_exists('ContentNotifierExtension')) ContentNotifierExtension::disable_filtering();
+		if(class_exists('Post')) Config::inst()->update('Post', 'allow_reading_spam', true);
+
+		// Init tasks
 		$taskGroup = $request->getVar('tasks') ?: 'tasks';
 		$this->message("Beginning import tasks {$taskGroup}");
-
+		
 		$this->connectToRemoteSite();
 
 		// Check if we only want to do a single step
