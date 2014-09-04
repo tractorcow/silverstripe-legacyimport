@@ -29,5 +29,7 @@ abstract class LegacyHelper extends Object {
 	 * @param DataObject $localObject
 	 * @param ArrayData $remoteObject
 	 */
-	abstract function updateLocalObject(DataObject $localObject, ArrayData $remoteObject);
+	abstract public function updateLocalObject(DataObject $localObject, ArrayData $remoteObject);
+
+	abstract public function init();
 }

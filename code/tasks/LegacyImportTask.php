@@ -62,7 +62,9 @@ class LegacyImportTask extends ImportTask {
 		$helperConfig = static::config()->helpers;
 		$helpers = array();
 		if($helperConfig) foreach($helperConfig as $helper) {
-			$helpers[] = $helper['helper']::create($this, $helper);
+			$helper = $helper['helper']::create($this, $helper);
+			$helper->init();
+			$helpers[] = $helper;
 		}
 
 		// Make all tasks

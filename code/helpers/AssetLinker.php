@@ -21,6 +21,14 @@ class AssetLinker extends LegacyHelper {
 		}
 	}
 
+	public function init() {
+		// Setup schema
+		$remoteConn = $this->task->getRemoteConnection();
+		$this->task->ensureTableHasColumn(DB::getConn(), 'File', 'LegacyID', 'int(11) not null default 0');
+		$this->task->ensureTableHasColumn($remoteConn, 'File', '_ImportedID', 'int(11) not null default 0');
+		$this->task->ensureTableHasColumn($remoteConn, 'File', '_ImportedDate', 'datetime');
+	}
+
 	/**
 	 * Get an array of all image urls in an object's HTML fields
 	 *
@@ -126,7 +134,7 @@ class AssetLinker extends LegacyHelper {
 
 		// Ensure parent directory exists
 		$localDir = dirname($localPath);
-		if(!file_exists($localPath)) Filesystem::makeFolder($localDir);
+		Filesystem::makeFolder($localDir);
 
 		// Copy from remote dir
 		$remoteURL = $this->getRemoteURL($path);
@@ -278,12 +286,29 @@ class AssetLinker extends LegacyHelper {
 			));
 			if(!$remoteFile) return null;
 
+			// Ensure that this file has a valid name
+			if(!$this->isValidFile($remoteFile->Name)) continue;
+
 			// Copy file to filesystem and save
 			$localFile = $this->findOrImportFile($remoteFile);
+			if(!$localFile) continue;
+
+			// Save new file
 			$changed = true;
 			$localObject->$field = $localFile->ID;
 		}
 		if($changed) $localObject->write();
+	}
+
+	/**
+	 * Check if the following path is valid
+	 *
+	 * @param type $path
+	 */
+	protected function isValidFile($path) {
+		$extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+		$allowed = array_map('strtolower', File::config()->allowed_extensions);
+		return in_array($extension, $allowed);
 	}
 
 }
