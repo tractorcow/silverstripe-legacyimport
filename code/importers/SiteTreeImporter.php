@@ -23,16 +23,16 @@ class SiteTreeImporter extends DataObjectImporter {
 		foreach(SiteTree::get()->filter('ParentID', $localParentID) as $localPage) {
 			
 			// Check if this page is already matched to a remote object
-			$legacyID = $localPage->LegacyID;
+			// Use ?: null to distinguish between no found id, and id = 0 (root)
+			$legacyID = $localPage->LegacyID ?: null; 
 			if(empty($legacyID) && ($remoteParentID !== null)) {
 				// If we have a known remote parent then filter possible children to find a match
 				$remoteFilter = array_merge($localPage->toMap(), array('ParentID' => $remoteParentID));
-				$remoteData = $this->findRemoteObject($remoteFilter);
-				if($remoteData) {
+				$remotePage = $this->findRemoteObject($remoteFilter);
+				if($remotePage) {
 					// Given the newly matched item save it
-					$legacyID = $remoteData->ID;
-					$localPage->LegacyID = $legacyID;
-					$localPage->write();
+					$legacyID = $remotePage->ID;
+					$this->identifyRecords($localPage, $remotePage);
 				}
 			}
 

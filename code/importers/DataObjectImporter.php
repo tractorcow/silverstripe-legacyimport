@@ -270,22 +270,7 @@ class DataObjectImporter extends LegacyImporter {
 		foreach($localObjects as $localObject) {
 			// Find remote object matching this local one
 			$remoteData = $this->findRemoteObject($localObject->toMap());
-			if($remoteData) {
-				// Given the newly matched item save it
-				$localObject->LegacyID = $remoteData->ID;
-				$localObject->write();
-
-				// Match remote object to this, but not _ImportedDate because it may need to
-				// have it's data migrated across
-				$conn = $this->task->getRemoteConnection();
-				$baseTable = $this->getRemoteBaseTable();
-				$conn->query(sprintf(
-					'UPDATE "%s" SET "_ImportedID" = %d WHERE "ID" = %d',
-					$baseTable,
-					intval($localObject->ID),
-					intval($remoteData->ID)
-				));
-			}
+			if($remoteData) $this->identifyRecords($localObject, $remoteData);
 			
 			// Show progress indicator
 			$this->task->progress(++$checked, $localCount);
@@ -294,6 +279,31 @@ class DataObjectImporter extends LegacyImporter {
 		// Check real progress (reduce number of unmatched remote object)
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
 		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
+	}
+
+	/**
+	 * Notes identification between two records
+	 *
+	 * Does NOT mark the remote record as _ImportedDate = current
+	 *
+	 * @param DataObject $localRecord
+	 * @param ArrayData $remoteRecord
+	 */
+	protected function identifyRecords($localRecord, $remoteRecord) {
+		// Given the newly matched item save it
+		$localRecord->LegacyID = $remoteRecord->ID;
+		$localRecord->write();
+
+		// Match remote object to this, but not _ImportedDate because it may need to
+		// have it's data migrated across
+		$conn = $this->task->getRemoteConnection();
+		$baseTable = $this->getRemoteBaseTable();
+		$conn->query(sprintf(
+			'UPDATE "%s" SET "_ImportedID" = %d WHERE "ID" = %d',
+			$baseTable,
+			intval($localRecord->ID),
+			intval($remoteRecord->ID)
+		));
 	}
 
 	/**
@@ -450,12 +460,13 @@ class DataObjectImporter extends LegacyImporter {
 	 * @return ArrayData Data for remote object if found
 	 */
 	protected function findRemoteObject($data) {
-		$items = $this->getRemoteObjects();
+		$query = $this->getRemoteObjectsQuery();
 		foreach($this->idColumns as $column) {
-			$value = isset($data[$column]) ? $data[$column] : null;
-			$items = $items->filter($column, $value);
+			$value = isset($data[$column]) ? $data[$column] : '';
+			$query->addWhere("\"{$column}\" = '".Convert::raw2sql($value)."'");
 		}
-		if($result = $items->first()) return new ArrayData($result);
+		$result = $this->task->query($query);
+		foreach($result as $row) return new ArrayData($row);
 	}
 
 	/**
