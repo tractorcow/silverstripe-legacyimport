@@ -124,7 +124,7 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function getNewOrChangedRemoteObjects() {
 		$query = $this->getRemoteObjectsQuery();
-		$query->whereAny(array(
+		$query->addWhereAny(array(
 			'"_ImportedID" = 0',
 			'"_ImportedDate" < "LastEdited"'
 		));
