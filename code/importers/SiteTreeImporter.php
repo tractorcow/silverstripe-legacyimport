@@ -1,6 +1,6 @@
 <?php
 
-class SiteTreeImporter extends DataObjectImporter {
+class SiteTreeImporter extends VersionedImporter {
 	
 	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		$this->targetClass = 'SiteTree';
@@ -65,13 +65,6 @@ class SiteTreeImporter extends DataObjectImporter {
 		// Check real progress (reduce number of unmatched remote object)
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
 		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
-	}
-
-	protected function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
-		parent::updateLocalObject($localObject, $remoteObject);
-
-		// Publish imported pages
-		$localObject->publish('Stage', 'Live');
 	}
 	
 }
