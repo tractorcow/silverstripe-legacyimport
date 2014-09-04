@@ -106,7 +106,7 @@ class ImportTask extends BuildTask {
 
 		// Make column if not found
 		if(!isset($fields[$field])) {
-			$this->message(' * Creating '.$field.' on remote table ' . $table);
+			$this->message(' * Creating '.$field.' on table ' . $table);
 			$conn->createField($table, $field, $spec);
 		}
 	}

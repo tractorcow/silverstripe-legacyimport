@@ -7,7 +7,7 @@ class TableImportTask extends ImportTask {
 	protected $description =
 		'Import tables using mysqldump.
 		Use tables=Table1,Table2 to specify tables.
-		Use keeprelations=true to not reset has_one to zero.';
+		Use keeprelations=true to not reset has_one to zero, or specify a comma separated list of RelationIDs.';
 
 	protected $tempFile;
 
@@ -67,9 +67,20 @@ class TableImportTask extends ImportTask {
 		$tables = explode(',', $request->getVar('tables'));
 		if(empty($tables)) throw new InvalidArgumentException("No 'tables' parameter specified");
 
-		// Check relations field
+		// Check relation we want to keep field
 		$keepRelations = $request->getVar('keeprelations');
-		if($keepRelations === 'false') $keepRelations = false;
+		switch($keepRelations) {
+			case 'true':
+				$keepRelations = true;
+				break;
+			case 'false':
+			case '0':
+				$keepRelations = false;
+				break;
+			default:
+				$keepRelations = explode(',', $keepRelations);
+		}
+
 
 		$this->message("== Importing bulk data ==");
 
@@ -90,18 +101,22 @@ class TableImportTask extends ImportTask {
 		singleton("DatabaseAdmin")->doBuild(false);
 
 		// Fix relation IDs
-		if($keepRelations) {
-			$this->message("Keeping relations; Not resetting RelationID to zero");
+		if($keepRelations === true) {
+			$this->message("Keeping relations; Not resetting RelationIDs to zero");
 		} else {
-			$this->message("Invalidate all has_one fields (bypass this with keeprelations=true)");
+			$this->message("Invalidate has_one fields (bypass this with keeprelations=relationid)");
 			foreach($tables as $table) {
 				$hasOne = Config::inst()->get($table, 'has_one', Config::UNINHERITED);
 				if(empty($hasOne)) continue;
 
 				foreach($hasOne as $relation => $class) {
 					$field = $relation."ID";
-					$this->message(" * Resetting relation {$table}.{$field} to zero on migrated table");
-					DB::query('UPDATE "' . $table . '" SET "' . $field . '" = 0');
+					if(is_array($keepRelations) && in_array($field, $keepRelations)) {
+						$this->message(" * Keeping relation {$table}.{$field}");
+					} else {
+						$this->message(" * Resetting relation {$table}.{$field} to zero on migrated table");
+						DB::query('UPDATE "' . $table . '" SET "' . $field . '" = 0');
+					}
 				}
 			}
 		}
@@ -111,7 +126,7 @@ class TableImportTask extends ImportTask {
 		$this->message("== Marking records as migrated ==");
 		foreach($tables as $table) {
 			// Don't mark non-base tables (subclasses of Member, etc)
-			if($table != ClassInfo::baseDataClass($table)) continue;
+			if(is_a($table, 'DataObject', true) && $table != ClassInfo::baseDataClass($table)) continue;
 			$remoteConn = $this->getRemoteConnection();
 
 			// Setup schema
