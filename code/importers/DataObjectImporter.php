@@ -288,22 +288,21 @@ class DataObjectImporter extends LegacyImporter {
 	 *
 	 * @param DataObject $localRecord
 	 * @param ArrayData $remoteRecord
+	 * @param bool $markImported True if should set the _ImportedDate to NOW(). Default to false because
+	 * sometimes we just want to identify a record, not update it at the same time.
 	 */
-	protected function identifyRecords($localRecord, $remoteRecord) {
+	protected function identifyRecords($localRecord, $remoteRecord, $markImported = false) {
 		// Given the newly matched item save it
 		$localRecord->LegacyID = $remoteRecord->ID;
 		$localRecord->write();
 
-		// Match remote object to this, but not _ImportedDate because it may need to
-		// have it's data migrated across
+		// Match remote object to this
 		$conn = $this->task->getRemoteConnection();
 		$baseTable = $this->getRemoteBaseTable();
-		$conn->query(sprintf(
-			'UPDATE "%s" SET "_ImportedID" = %d WHERE "ID" = %d',
-			$baseTable,
-			intval($localRecord->ID),
-			intval($remoteRecord->ID)
-		));
+		$query = $markImported
+			? 'UPDATE "%s" SET "_ImportedID" = %d, "_ImportedDate" = NOW() WHERE "ID" = %d'
+			: 'UPDATE "%s" SET "_ImportedID" = %d WHERE "ID" = %d';
+		$conn->query(sprintf($query, $baseTable, intval($localRecord->ID), intval($remoteRecord->ID)));
 	}
 
 	/**
@@ -546,18 +545,7 @@ class DataObjectImporter extends LegacyImporter {
 		// Save mapping ID
 		// Note: If using a non-identifying strategy (e.g. Add) then this step is important
 		// to ensure that this object is not re-added in subsequent imports
-		$localObject->LegacyID = $remoteObject->ID;
-		$localObject->write();
-
-		// Save data to remote object
-		$conn = $this->task->getRemoteConnection();
-		$baseTable = $this->getRemoteBaseTable();
-		$conn->query(sprintf(
-			'UPDATE "%s" SET "_ImportedID" = %d, "_ImportedDate" = NOW() WHERE "ID" = %d',
-			$baseTable,
-			intval($localObject->ID),
-			intval($remoteObject->ID)
-		));
+		$this->identifyRecords($localObject, $remoteObject, true);
 	}
 
 	/**
