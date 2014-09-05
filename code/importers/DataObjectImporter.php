@@ -124,9 +124,11 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function getNewOrChangedRemoteObjects() {
 		$query = $this->getRemoteObjectsQuery();
+		$table = $this->getRemoteBaseTable();
 		$query->addWhereAny(array(
-			'"_ImportedID" = 0',
-			'"_ImportedDate" < "LastEdited"'
+			"\"{$table}\".\"_ImportedID\" = 0",
+			"\"{$table}\".\"_ImportedDate\" IS NULL",
+			"\"{$table}\".\"_ImportedDate\" < \"{$table}\".\"LastEdited\""
 		));
 		$items = iterator_to_array($this->task->query($query));
 		return new ArrayList($items);
@@ -141,7 +143,10 @@ class DataObjectImporter extends LegacyImporter {
 		$query = $this->getRemoteObjectsQuery();
 		$table = $this->getRemoteBaseTable();
 		$query->addWhere("\"{$table}\".\"_ImportedID\" > 0");
-		$query->addWhere("\"{$table}\".\"_ImportedDate\" < \"{$table}\".\"LastEdited\"");
+		$query->addWhereAny(array(
+			"\"{$table}\".\"_ImportedDate\" IS NULL",
+			"\"{$table}\".\"_ImportedDate\" < \"{$table}\".\"LastEdited\""
+		));
 		$items = iterator_to_array($this->task->query($query));
 		return new ArrayList($items);
 	}
@@ -515,19 +520,19 @@ class DataObjectImporter extends LegacyImporter {
 	}
 
 	/**
-	 * Copy all non-relation fields from the remote object to the local object
+	 * Copies relevant field values from the $remoteObject to the $localObject
 	 *
 	 * @param DataObject $localObject
 	 * @param ArrayData $remoteObject
 	 */
-	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
+	protected function copyToLocalObject(DataObject $localObject, ArrayData $remoteObject) {
 		foreach($remoteObject->toMap() as $field => $value) {
 			// Skip ID and class
 			if(in_array($field, array('ClassName', 'ID'))) continue;
 
 			// Skip obsolete fields
 			if(preg_match('/^_obsolete.*/', $field)) continue;
-			
+
 			// While updating map any relation field that we can
 			if(preg_match('/(?<relation>.+)ID$/', $field, $matches)) {
 				if($value) {
@@ -540,6 +545,17 @@ class DataObjectImporter extends LegacyImporter {
 				$localObject->$field = $value;
 			}
 		}
+	}
+
+	/**
+	 * Copy all non-relation fields from the remote object to the local object
+	 *
+	 * @param DataObject $localObject
+	 * @param ArrayData $remoteObject
+	 */
+	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
+		// Copy fields
+		$this->copyToLocalObject($localObject, $remoteObject);
 		
 		// Let helpers update each object
 		foreach($this->helpers as $helper) {

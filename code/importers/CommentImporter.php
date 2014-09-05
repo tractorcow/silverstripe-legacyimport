@@ -16,25 +16,8 @@ class CommentImporter extends DataObjectImporter {
 	}
 
 	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
-		foreach($remoteObject->toMap() as $field => $value) {
-			// Skip ID and class
-			if(in_array($field, array('ClassName', 'ID'))) continue;
-
-			// Skip obsolete fields
-			if(preg_match('/^_obsolete.*/', $field)) continue;
-
-			// While updating map any relation field that we can
-			if(preg_match('/(?<relation>.+)ID$/', $field, $matches)) {
-				if($value) {
-					// Try to find local ID that corresponds to this relation
-					$localID = $this->findMappedRelation($matches['relation'], $value);
-					// Skip empty
-					if($localID) $localObject->$field = $localID;
-				}
-			} else {
-				$localObject->$field = $value;
-			}
-		}
+		// Copy fields
+		$this->copyToLocalObject($localObject, $remoteObject);
 
 		// Fix mapped tables from old schema to new one
 		$parentPage = SiteTree::get()->filter('LegacyID', $remoteObject->ParentID)->first();

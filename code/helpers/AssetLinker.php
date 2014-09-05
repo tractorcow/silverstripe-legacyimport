@@ -262,15 +262,22 @@ class AssetLinker extends LegacyHelper {
 		return $localFile;
 	}
 
-	public function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
-		// Extract all html images
-		$imageURLs = $this->getHTMLImageUrls($localObject);
-		foreach($imageURLs as $imageURL) $this->importFile($imageURL);
-
+	/**
+	 * Update all has_ones that are linked to assets
+	 *
+	 * @param \DataObject $localObject
+	 * @param \ArrayData $remoteObject
+	 * @return null
+	 */
+	protected function updateLocaleAssetRelations(\DataObject $localObject, \ArrayData $remoteObject) {
 		// Now update all has_one => file relations
 		$changed = false;
 		foreach($localObject->has_one() as $relation => $class) {
+			// Link file
 			if(!is_a($class, 'File', true)) continue;
+			
+			// Don't link folders
+			if(is_a($class, 'Folder', true)) continue;
 
 			// No need to import if found in a previous step
 			$field = $relation."ID";
@@ -279,7 +286,7 @@ class AssetLinker extends LegacyHelper {
 			// If the remote object doesn't have this field then can also skip it
 			$remoteFileID = intval($remoteObject->$field);
 			if(empty($remoteFileID)) continue;
-			
+
 			// Find remote file with this ID
 			$remoteFile = $this->findRemoteFile(array(
 				sprintf('"ID" = %d', intval($remoteFileID))
@@ -298,6 +305,20 @@ class AssetLinker extends LegacyHelper {
 			$localObject->$field = $localFile->ID;
 		}
 		if($changed) $localObject->write();
+	}
+
+	public function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
+		// Extract all html images
+		$imageURLs = $this->getHTMLImageUrls($localObject);
+		foreach($imageURLs as $imageURL) $this->importFile($imageURL);
+
+		// Now update all has_one => file relations
+		$this->updateLocaleAssetRelations($localObject, $remoteObject);
+
+		// If this object is itself a File, check that the filename is locally copied
+		if($localObject instanceof File) {
+			$this->copyRemoteFile($localObject->Filename);
+		}
 	}
 
 	/**
