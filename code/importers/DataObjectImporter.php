@@ -139,8 +139,9 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function getChangedRemoteObjects() {
 		$query = $this->getRemoteObjectsQuery();
-		$query->addWhere('"_ImportedID" > 0');
-		$query->addWhere('"_ImportedDate" < "LastEdited"');
+		$table = $this->getRemoteBaseTable();
+		$query->addWhere("\"{$table}\".\"_ImportedID\" > 0");
+		$query->addWhere("\"{$table}\".\"_ImportedDate\" < \"{$table}\".\"LastEdited\"");
 		$items = iterator_to_array($this->task->query($query));
 		return new ArrayList($items);
 	}
@@ -152,7 +153,8 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function getUnmatchedRemoteObjects() {
 		$query = $this->getRemoteObjectsQuery();
-		$query->addWhere('"_ImportedID" = 0');
+		$table = $this->getRemoteBaseTable();
+		$query->addWhere("\"{$table}\".\"_ImportedID\" = 0");
 		$items = iterator_to_array($this->task->query($query));
 		return new ArrayList($items);
 	}
@@ -164,7 +166,8 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function getMatchedRemoteObjects() {
 		$query = $this->getRemoteObjectsQuery();
-		$query->addWhere('"_ImportedID" > 0');
+		$table = $this->getRemoteBaseTable();
+		$query->addWhere("\"{$table}\".\"_ImportedID\" > 0");
 		$items = iterator_to_array($this->task->query($query));
 		return new ArrayList($items);
 	}
@@ -196,9 +199,10 @@ class DataObjectImporter extends LegacyImporter {
 		$baseClass = array_shift($tables);
 
 		// Generate sql query
-		$query = new SQLQuery('*', "\"{$baseClass}\"", $this->targetWhere);
+		$query = new SQLQuery("\"{$baseClass}\".*", "\"{$baseClass}\"", $this->targetWhere);
 		$query->setOrderBy("\"{$baseClass}\".\"ID\" ASC"); // Sort by ID for some performance reasons
 		foreach($tables as $class) {
+			$query->addSelect("\"{$class}\".*");
 			$query->addLeftJoin($class, "\"{$baseClass}\".\"ID\" = \"{$class}\".\"ID\"");
 		}
 		return $query;
