@@ -2,11 +2,10 @@
 
 abstract class LegacyHelper extends Object {
 
-
 	/**
 	 * Parent build task to report to
 	 *
-	 * @var LegacyImportTask
+	 * @var ImportTask
 	 */
 	protected $task;
 	
@@ -17,7 +16,7 @@ abstract class LegacyHelper extends Object {
 	 * @param array $parameters Parameter input
 	 * @throws InvalidArgumentException
 	 */
-	public function __construct(LegacyImportTask $task, $parameters) {
+	public function __construct(ImportTask $task, $parameters) {
 		parent::__construct();
 
 		$this->task = $task;

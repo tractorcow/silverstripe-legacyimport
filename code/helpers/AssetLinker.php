@@ -9,7 +9,7 @@ class AssetLinker extends LegacyHelper {
 	 */
 	protected $targetWhere = array();
 
-	public function __construct(\LegacyImportTask $task, $parameters) {
+	public function __construct(ImportTask $task, $parameters = array()) {
 		parent::__construct($task, $parameters);
 
 		if(!File::has_extension('LegacyDataObject')) {
@@ -127,7 +127,7 @@ class AssetLinker extends LegacyHelper {
 	 * @param string $path Path relative to baseurl
 	 * @return bool True if file exists or is copied
 	 */
-	protected function copyRemoteFile($path) {
+	public function copyRemoteFile($path) {
 		// Check if file exists
 		$localPath = Director::baseFolder() . '/' . $path;
 		if(file_exists($localPath)) return true;
