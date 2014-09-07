@@ -1,6 +1,6 @@
 <?php
 
-class SiteTreeImporter extends VersionedImporter {
+class SiteTreeImporter extends DataObjectImporter {
 	
 	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		$this->targetClass = 'SiteTree';
