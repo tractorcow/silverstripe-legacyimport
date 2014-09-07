@@ -66,5 +66,14 @@ class SiteTreeImporter extends VersionedImporter {
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
 		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
 	}
+
+	protected function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
+		parent::updateLocalObject($localObject, $remoteObject);
+
+		// Publish imported pages
+		if($remoteObject->Staus == 'Published') {
+			$localObject->publish('Stage', 'Live');
+		}
+	}
 	
 }
