@@ -67,11 +67,26 @@ class SiteTreeImporter extends VersionedImporter {
 		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
 	}
 
+	/**
+	 * Determine if this remote record has been published
+	 *
+	 * @param ArrayData $remoteObject
+	 * @return type
+	 */
+	protected function isRemotePagePulished(ArrayData $remoteObject) {
+		$conn = $this->task->getRemoteConnection();
+		$result = $conn->query(sprintf(
+			'SELECT COUNT(*) FROM "SiteTree_Live" WHERE "ID" = %d',
+			intval($remoteObject->ID)
+		));
+		return $result->value() > 0;
+	}
+
 	protected function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
 		parent::updateLocalObject($localObject, $remoteObject);
 
-		// Publish imported pages
-		if($remoteObject->Staus == 'Published') {
+		// Check if remote page is published
+		if($this->isRemotePagePulished($remoteObject)) {
 			$localObject->publish('Stage', 'Live');
 		}
 	}
