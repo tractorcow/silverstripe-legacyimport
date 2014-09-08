@@ -1,6 +1,6 @@
 <?php
 
-class SiteTreeImporter extends DataObjectImporter {
+class SiteTreeImporter extends VersionedImporter {
 	
 	public function __construct(LegacyImportTask $task, $parameters, $helpers = array()) {
 		$this->targetClass = 'SiteTree';
@@ -65,30 +65,6 @@ class SiteTreeImporter extends DataObjectImporter {
 		// Check real progress (reduce number of unmatched remote object)
 		$afterUnmatched = $this->getUnmatchedRemoteObjects()->count();
 		$this->task->message(" * Result: {$beforeUnmatched} unmatched objects reduced to {$afterUnmatched}");
-	}
-
-	/**
-	 * Determine if this remote record has been published
-	 *
-	 * @param ArrayData $remoteObject
-	 * @return type
-	 */
-	protected function isRemotePagePulished(ArrayData $remoteObject) {
-		$conn = $this->task->getRemoteConnection();
-		$result = $conn->query(sprintf(
-			'SELECT COUNT(*) FROM "SiteTree_Live" WHERE "ID" = %d',
-			intval($remoteObject->ID)
-		));
-		return $result->value() > 0;
-	}
-
-	protected function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
-		parent::updateLocalObject($localObject, $remoteObject);
-
-		// Check if remote page is published
-		if($this->isRemotePagePulished($remoteObject)) {
-			$localObject->publish('Stage', 'Live');
-		}
 	}
 	
 }

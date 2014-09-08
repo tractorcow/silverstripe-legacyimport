@@ -20,6 +20,7 @@ class LegacyImportTask extends ImportTask {
 		$this->message("Beginning import tasks {$taskGroup}");
 		
 		$this->connectToRemoteSite();
+		Versioned::reading_stage('Stage');
 
 		// Check if we only want to do a single step
 		if($pass = $request->requestVar('pass')) {
