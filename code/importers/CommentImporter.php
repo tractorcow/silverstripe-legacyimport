@@ -24,7 +24,7 @@ class CommentImporter extends DataObjectImporter {
 		$localObject->Moderated = !$remoteObject->NeedsModeration;
 		$localObject->URL = $remoteObject->CommenterURL;
 		$localObject->BaseClass = 'SiteTree';
-		$localObject->ParentID = $parentPage ? $remoteObject->ID : 0;
+		$localObject->ParentID = $parentPage ? $parentPage->ID : 0;
 
 		// Let helpers update each object
 		foreach($this->helpers as $helper) {
