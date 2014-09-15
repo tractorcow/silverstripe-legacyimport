@@ -291,14 +291,23 @@ class AssetLinker extends LegacyHelper {
 			$remoteFile = $this->findRemoteFile(array(
 				sprintf('"ID" = %d', intval($remoteFileID))
 			));
-			if(!$remoteFile) return null;
+			if(!$remoteFile) {
+				$this->task->error("Could not find $relation file with id $remoteFileID");
+				continue;
+			}
 
 			// Ensure that this file has a valid name
-			if(!$this->isValidFile($remoteFile->Name)) continue;
+			if(!$this->isValidFile($remoteFile->Name)) {
+				$this->task->error("Remote $relation file does not have a valid name '".$remoteFile->Name."'");
+				continue;
+			}
 
 			// Copy file to filesystem and save
 			$localFile = $this->findOrImportFile($remoteFile);
-			if(!$localFile) continue;
+			if(!$localFile) {
+				$this->task->error("Failed to import $relation file '".$remoteFile->Name."'");
+				continue;
+			}
 
 			// Save new file
 			$changed = true;
