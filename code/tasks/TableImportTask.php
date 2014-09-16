@@ -64,6 +64,8 @@ class TableImportTask extends ImportTask {
 	}
 
 	public function run($request) {
+		parent::run($request);
+
 		$tables = explode(',', $request->getVar('tables'));
 		if(empty($tables)) throw new InvalidArgumentException("No 'tables' parameter specified");
 

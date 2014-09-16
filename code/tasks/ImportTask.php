@@ -16,6 +16,18 @@ class ImportTask extends BuildTask {
 	protected $quiet = false;
 
 	/**
+	 * Message verbosity level
+	 *
+	 * Defaults to 1
+	 *
+	 * Generally 0 = minimal output, 1 = per task / step, 2 = per record, 3 = per field, 4 = per operation
+	 * -1 means all messages are output
+	 *
+	 * @var int
+	 */
+	protected $verbosity = 1;
+
+	/**
 	 * Make this task quiet
 	 */
 	public function beQuiet() {
@@ -38,9 +50,11 @@ class ImportTask extends BuildTask {
 	 * Output a message
 	 *
 	 * @param string $message
+	 * @param int $verbosity Verbosity required to display this message (1 is default)
 	 */
-	public function message($message) {
+	public function message($message, $verbosity = 1) {
 		if($this->quiet) return;
+		if($this->verbosity >= 0 && $this->verbosity < $verbosity) return;
 		Debug::message(date('Y-m-d H:i:s').': '.$message, false);
 	}
 
@@ -90,7 +104,10 @@ class ImportTask extends BuildTask {
 	}
 
 	public function run($request) {
-		// do nothing. Override me!
+		// Set verbosity
+		if($verbosity = $request->requestVar('verbose')) {
+			$this->verbosity = (int)$verbosity;
+		}
 	}
 
 	/**

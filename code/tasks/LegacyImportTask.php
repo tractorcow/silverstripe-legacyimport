@@ -11,6 +11,8 @@ class LegacyImportTask extends ImportTask {
 	 * @return SS_HTTPResponse
 	 */
 	public function run($request) {
+		parent::run($request);
+		
 		// Disable filters
 		if(class_exists('ContentNotifierExtension')) ContentNotifierExtension::disable_filtering();
 		if(class_exists('Post')) Config::inst()->update('Post', 'allow_reading_spam', true);

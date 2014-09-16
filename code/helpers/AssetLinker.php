@@ -237,6 +237,8 @@ class AssetLinker extends LegacyHelper {
 	 * @return File The local file
 	 */
 	protected function importFile($filename) {
+		$this->task->message("Importing file $filename", 3);
+
 		// Detect resampled urls
 		$resampled = '';
 		if(preg_match('/^(?<before>.*\\/)_resampled\\/([^-]+)-(?<after>.*)$/', $filename, $matches)) {
@@ -272,20 +274,39 @@ class AssetLinker extends LegacyHelper {
 	protected function updateLocaleAssetRelations(\DataObject $localObject, \ArrayData $remoteObject) {
 		// Now update all has_one => file relations
 		$changed = false;
-		foreach($localObject->has_one() as $relation => $class) {
+		$relations = $localObject->has_one();
+		if(empty($relations)) {
+			$this->task->message(" ** No has_ones on {$localObject->Title}", 2);
+			return;
+		}
+		foreach($relations as $relation => $class) {
+			$this->task->message(" *** Checking relation name $relation", 3);
+			
 			// Link file
-			if(!is_a($class, 'File', true)) continue;
+			if(!is_a($class, 'File', true)) {
+				$this->task->message(" **** $relation is not a File", 4);
+				continue;
+			}
 			
 			// Don't link folders
-			if(is_a($class, 'Folder', true)) continue;
+			if(is_a($class, 'Folder', true))  {
+				$this->task->message(" **** $relation is a folder", 4);
+				continue;
+			}
 
 			// No need to import if found in a previous step
 			$field = $relation."ID";
-			if($localObject->$field) continue;
+			if($localObject->$field)  {
+				$this->task->message(" **** $relation already has value {$localObject->$field} on local object", 4);
+				continue;
+			}
 
 			// If the remote object doesn't have this field then can also skip it
 			$remoteFileID = intval($remoteObject->$field);
-			if(empty($remoteFileID)) continue;
+			if(empty($remoteFileID)) {
+				$this->task->message(" **** $relation has no value on remote object", 4);
+				continue;
+			}
 
 			// Find remote file with this ID
 			$remoteFile = $this->findRemoteFile(array(
@@ -311,12 +332,16 @@ class AssetLinker extends LegacyHelper {
 
 			// Save new file
 			$changed = true;
+			$this->task->message(" *** $relation assigned local value {$localFile->ID}", 3);
 			$localObject->$field = $localFile->ID;
 		}
 		if($changed) $localObject->write();
+		else $this->task->message(" ** No changes made to relations on {$localObject->Title}", 2);
 	}
 
 	public function updateLocalObject(\DataObject $localObject, \ArrayData $remoteObject) {
+		$this->task->message(" ** Updating local object {$localObject->Title}", 2);
+
 		// Extract all html images
 		$imageURLs = $this->getHTMLImageUrls($localObject);
 		foreach($imageURLs as $imageURL) $this->importFile($imageURL);
