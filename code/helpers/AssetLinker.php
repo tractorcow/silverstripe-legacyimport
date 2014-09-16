@@ -283,13 +283,13 @@ class AssetLinker extends LegacyHelper {
 			$this->task->message(" *** Checking relation name $relation", 3);
 			
 			// Link file
-			if(!is_a($class, 'File', true)) {
+			if(!ImportHelper::is_a($class, 'File')) {
 				$this->task->message(" **** $relation is not a File", 4);
 				continue;
 			}
 			
 			// Don't link folders
-			if(is_a($class, 'Folder', true))  {
+			if(ImportHelper::is_a($class, 'Folder'))  {
 				$this->task->message(" **** $relation is a folder", 4);
 				continue;
 			}

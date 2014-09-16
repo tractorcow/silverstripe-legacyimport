@@ -554,11 +554,14 @@ class DataObjectImporter extends LegacyImporter {
 	 * @param ArrayData $remoteObject
 	 */
 	protected function updateLocalObject(DataObject $localObject, ArrayData $remoteObject) {
+		$this->task->message(" ** Updating local object {$localObject->Title}", 2);
 		// Copy fields
 		$this->copyToLocalObject($localObject, $remoteObject);
 		
 		// Let helpers update each object
+		if(empty($this->helpers)) $this->task->message(' ** No helpers configured', 2);
 		foreach($this->helpers as $helper) {
+			$this->task->message(' ** Running helper '.get_class($helper), 2);
 			$helper->updateLocalObject($localObject, $remoteObject);
 		}
 
@@ -576,7 +579,7 @@ class DataObjectImporter extends LegacyImporter {
 	 */
 	protected function createLocalFromRemoteObject(ArrayData $remoteObject) {
 		// Allow data to override class
-		$class = ($remoteObject->ClassName && is_a($remoteObject->ClassName, $this->targetClass, true))
+		$class = ($remoteObject->ClassName && ImportHelper::is_a($remoteObject->ClassName, $this->targetClass))
 			? $remoteObject->ClassName
 			: $this->targetClass;
 

@@ -128,7 +128,7 @@ class TableImportTask extends ImportTask {
 		$this->message("== Marking records as migrated ==");
 		foreach($tables as $table) {
 			// Don't mark non-base tables (subclasses of Member, etc)
-			if(is_a($table, 'DataObject', true) && $table != ClassInfo::baseDataClass($table)) continue;
+			if(ImportHelper::is_a($table, 'DataObject') && $table != ClassInfo::baseDataClass($table)) continue;
 			$remoteConn = $this->getRemoteConnection();
 
 			// Setup schema

@@ -25,7 +25,7 @@ class TruncateImporter extends DataObjectImporter {
 	}
 
 	public function importPass() {
-		if(is_a($this->targetClass, 'SiteTree', true)) {
+		if(ImportHelper::is_a($this->targetClass, 'SiteTree')) {
 			throw new InvalidArgumentException("Don't run TruncateImporter on a SiteTree class");
 		}
 		
@@ -64,9 +64,12 @@ class TruncateImporter extends DataObjectImporter {
 			$this->task->progress(++$total, $remoteCount);
 
 			// Make new object
-			$class = (isset($remoteObject['ClassName']) && is_a($remoteObject['ClassName'], $this->targetClass, true))
-				? $remoteObject['ClassName']
-				: $this->targetClass;
+			$class = (
+					isset($remoteObject['ClassName'])
+					&& ImportHelper::is_a($remoteObject['ClassName'], $this->targetClass)
+				)
+					? $remoteObject['ClassName']
+					: $this->targetClass;
 
 			// Direct copy data into the new object
 			$localObject = $class::create();
